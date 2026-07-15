@@ -1,7 +1,6 @@
 # EccoPy
 
-Data-agnostic Python implementation of the **ECCO** (Echo Classification for
-Convection and Others) and **ConvStratFinder** radar algorithms.
+Data-agnostic Python implementation of the **ECCO** (Echo Classification from COnvectivity) radar algorithm.
 
 EccoPy operates purely on numpy arrays — it never reads or writes files, and
 makes no assumptions about coordinate systems, file formats, or radar type.
