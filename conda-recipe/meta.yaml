@@ -1,0 +1,74 @@
+{% set name = "eccopy" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  # Local build/test (from a checkout of this repo):
+  #   conda build conda-recipe/  --with the repo root as the working dir
+  # this picks up the source tree two directories up from this recipe.
+  path: ..
+  # Once published, switch to a PyPI sdist instead, e.g.:
+  # url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  # sha256: <fill in after `python -m build --sdist` + sha256sum dist/eccopy-{{ version }}.tar.gz>
+
+build:
+  number: 0
+  noarch: python
+  script: "{{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation"
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=68
+    - wheel
+  run:
+    - python >=3.10
+    - numpy >=1.24
+    - scipy >=1.10
+    - scikit-learn >=1.2
+    - numba >=0.58
+
+test:
+  imports:
+    - eccopy
+    - eccopy.eccopy1d
+    - eccopy.eccopy2d_v
+    - eccopy.eccopy2d_h
+    - eccopy.eccopy3d
+    - eccopy.stats
+  requires:
+    - pip
+    - pytest >=7.4
+    - matplotlib-base >=3.7   # for the [plot] extra's colormap/plot tests
+  source_files:
+    - eccopy/tests
+  commands:
+    - pip check
+    # Confirm the .mat reference data files installed correctly (see
+    # CHANGELOG.md 0.1.0 "Fixed" -- this was previously silently missing
+    # from built packages).
+    - python -c "from eccopy.core.classification import _DISK_STREL_DIR, _DISK_DECOMP_DIR; import os; assert os.listdir(_DISK_STREL_DIR); assert os.listdir(_DISK_DECOMP_DIR); print('data files OK')"
+    - pytest eccopy/tests -q
+
+about:
+  home: https://github.com/NCAR/eccopy
+  license: BSD-3-Clause
+  license_file: LICENSE
+  summary: Data-agnostic Python implementation of the ECCO / ConvStratFinder radar echo classification algorithm
+  description: |
+    EccoPy is a data-agnostic, array-in/array-out Python port of NCAR's
+    MATLAB ECCO-V and C++ ConvStratFinder/LROSE-ECCO radar echo
+    classification algorithms, covering 1-D profiles, 2-D vertical
+    cross-sections, 2-D horizontal composites, and full 3-D volumes.
+    Operates purely on numpy arrays -- no file I/O, no assumptions about
+    coordinate systems or radar type.
+  doc_url: https://github.com/NCAR/eccopy#readme
+  dev_url: https://github.com/NCAR/eccopy
+
+extra:
+  recipe-maintainers:
+    - your-github-username-here
