@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eccopy"
+version = "0.1.0"
+description = "Data-agnostic Python implementation of the ECCO / ConvStratFinder radar echo classification algorithm (1-D, 2-D-V, 2-D-H, 3-D). Operates purely on numpy arrays — no file I/O."
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+requires-python = ">=3.10"
+authors = [
+    { name = "NCAR-EOL", email = "romatschke@ucar.edu" },
+]
+keywords = ["radar", "meteorology", "precipitation", "convection", "echo-classification"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.2",
+    "numba>=0.58",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.7"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov",
+    "matplotlib>=3.7",
+]
+
+[project.urls]
+Repository = "https://github.com/NCAR/lrose-ecco"
+"Algorithm Reference" = "https://doi.org/10.1175/JTECH-D-22-0019.1"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["eccopy*"]
+
+[tool.setuptools.package-data]
+eccopy = ["core/data/disk_strels/*.mat", "core/data/disk_decomp/*.mat"]
+
+[tool.pytest.ini_options]
+testpaths = ["eccopy/tests"]
+addopts = "-v"
+markers = [
+    "slow: builds a real wheel; slower than the rest of the suite",
+]
+
+[tool.coverage.run]
+source = ["eccopy"]
+omit = ["eccopy/tests/*"]
