@@ -9,8 +9,11 @@ You give it reflectivity (and optionally height/temperature) arrays plus
 coordinate or spacing arrays; it gives you back classification arrays of the
 same shape.
 
-Algorithm reference: [Romatschke (2023), JTECH](https://doi.org/10.1175/JTECH-D-22-0019.1)
-Original MATLAB/C++ source: [NCAR/lrose-ecco](https://github.com/NCAR/lrose-ecco)
+Algorithm references: 
+    - [Romatschke and Dixon (2022), JTECH](https://doi.org/10.1175/JTECH-D-22-0019.1) / [Dixon and Romatschke (2022), JTECH](https://doi.org/10.1175/JTECH-D-22-0018.1)
+    
+Original MATLAB/C++ source: 
+    - [NCAR/lrose-ecco](https://github.com/NCAR/lrose-ecco) / [NCAR/lrose-core](https://github.com/ncar/lrose-core)
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development/validation
 workflow and [CHANGELOG.md](CHANGELOG.md) for release history.
