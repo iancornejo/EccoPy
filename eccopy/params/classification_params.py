@@ -52,7 +52,19 @@ class ClassificationParams:
 
     Shared
     ------
-    surf_alt_lim : float       Min AGL for valid echo [m].             Default: 200
+    surf_alt_lim : float       Near-surface altitude limit [m].         Default: 200
+                               Two roles, both keyed off this one value:
+                               (1) class_sub_2d's near-surface convective
+                               test (dist_asl_topo < 500 + surf_alt_lim),
+                               always active in sub-classification; (2)
+                               optional pre-texture surface-echo removal,
+                               applied ONLY when a caller opts in
+                               (eccopy2d_v.run(remove_surface_echo=True)).
+                               It does NOT by itself gate whether a point is
+                               classified -- masking is opt-in, matching the
+                               real ECCO-V drivers, some of which skip it
+                               (e.g. SeaPol RHI). Role (1) uses AGL
+                               (height-topo); role (2) uses raw altitude.
     min_convectivity_for_convective : float                            Default: 0.5
     max_convectivity_for_stratiform : float                            Default: 0.4
 
