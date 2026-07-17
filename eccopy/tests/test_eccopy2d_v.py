@@ -301,3 +301,65 @@ def test_return_intermediates_default_off_and_matches_when_on():
     np.testing.assert_allclose(r_default.texture, r_debug.texture, equal_nan=True)
     np.testing.assert_allclose(r_default.convectivity, r_debug.convectivity, equal_nan=True)
     np.testing.assert_array_equal(r_default.echo_type, r_debug.echo_type)
+
+
+def test_remove_surface_echo_matches_manual_masking():
+    """remove_surface_echo=True must reproduce the driver-level surfAltLim
+    masking from the real ECCO-V MATLAB scripts:
+        data.DBZ_F(data.Z .* 1000 < surfAltLim) = nan;   (before texture)
+    which is exactly the manual `dbz[z_km < surf_alt_lim/1000] = nan`
+    workaround, and must NOT mutate the caller's dbz array."""
+    from eccopy.params import ClassificationParams
+
+    dbz, z_km, x_km = _synthetic_section(nz=24)
+    # Ensure some rows fall below the limit.
+    z_km = np.linspace(0.05, 12, dbz.shape[0])
+    cp = ClassificationParams(surf_alt_lim=200.0)   # 0.2 km
+    below = z_km < 0.2
+    assert below.any(), "test grid must include rows below surf_alt_lim"
+
+    dbz_caller = dbz.copy()
+    r_flag = eccopy2d_v.run(dbz_caller, coords_z=z_km, coords_x=x_km,
+                            window=WindowSpec(7), class_params=cp,
+                            remove_surface_echo=True)
+
+    # caller's dbz must be untouched
+    assert np.array_equal(dbz_caller, dbz)
+
+    dbz_manual = dbz.copy()
+    dbz_manual[below] = np.nan
+    r_manual = eccopy2d_v.run(dbz_manual, coords_z=z_km, coords_x=x_km,
+                              window=WindowSpec(7), class_params=cp,
+                              remove_surface_echo=False)
+
+    def _key(a):
+        return np.nan_to_num(a, nan=-1.0)
+
+    assert np.array_equal(_key(r_flag.echo_type), _key(r_manual.echo_type))
+    assert np.all(np.isnan(r_flag.echo_type[below]))
+
+
+def test_remove_surface_echo_default_off_is_row_local():
+    """Default (off) leaves dbz unmasked; turning it on only affects rows
+    at/below the limit -- rows above must be bit-identical (2-D-V texture
+    slides along X, so masking a bottom row cannot contaminate rows above)."""
+    from eccopy.params import ClassificationParams
+
+    dbz, _, x_km = _synthetic_section(nz=24)
+    z_km = np.linspace(0.05, 12, dbz.shape[0])
+    cp = ClassificationParams(surf_alt_lim=200.0)
+    below = z_km < 0.2
+
+    r_off = eccopy2d_v.run(dbz, coords_z=z_km, coords_x=x_km,
+                           window=WindowSpec(7), class_params=cp,
+                           remove_surface_echo=False)
+    r_on = eccopy2d_v.run(dbz, coords_z=z_km, coords_x=x_km,
+                          window=WindowSpec(7), class_params=cp,
+                          remove_surface_echo=True)
+
+    def _key(a):
+        return np.nan_to_num(a, nan=-1.0)
+
+    assert not np.array_equal(_key(r_off.echo_type), _key(r_on.echo_type))
+    assert np.array_equal(_key(r_off.echo_type[~below]),
+                          _key(r_on.echo_type[~below]))

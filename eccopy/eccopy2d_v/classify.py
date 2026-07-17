@@ -100,6 +100,7 @@ def run(dbz: Union[np.ndarray, list],
         texture_params: Optional[TextureParams] = None,
         class_params: Optional[ClassificationParams] = None,
         kernel_mode: str = "uniform",
+        remove_surface_echo: bool = False,
         return_intermediates: bool = False) -> Result2DV:
     """
     Run EccoPy-2D-V: texture → convectivity → classification.
@@ -151,10 +152,14 @@ def run(dbz: Union[np.ndarray, list],
         How to interpret coords_z / coords_x.
     texture_params : TextureParams, optional
     class_params : ClassificationParams, optional
-        surf_alt_lim (used by sub-classification's near-surface test) is
-        read from here as cp.surf_alt_lim -- there is no separate
-        vert_params argument; VerticalParams is scoped to the 3-D path
-        only and does not apply to this function. See its own docstring.
+        surf_alt_lim has TWO independent roles, both driven by this one
+        value (metres):
+          1. class_sub_2d's near-surface convective test (always active
+             when sub-classification runs) -- read here as cp.surf_alt_lim.
+          2. Optional pre-texture surface-echo removal -- ONLY when
+             `remove_surface_echo=True` (see below). Off by default.
+        There is no separate vert_params argument; VerticalParams is scoped
+        to the 3-D path only and does not apply to this function.
     kernel_mode : {"uniform", "varying"}
         How to resolve the texture window's physical size into a pixel
         radius when `coords_x` gives non-uniform spacing, INCLUDING
@@ -179,6 +184,18 @@ def run(dbz: Union[np.ndarray, list],
               row-by-row (but not point-by-point) behaviour, use
               "varying" together with a coords_x that is already
               constant within each row.
+    remove_surface_echo : bool
+        If True, set dbz to NaN wherever the vertical altitude coordinate
+        (coords_z, interpreted as km positions) is below cp.surf_alt_lim,
+        BEFORE texture is computed. This reproduces the driver-level
+        surfAltLim masking in the real ECCO-V MATLAB scripts (e.g.
+        `data.DBZ_F(data.Z.*1000 < surfAltLim) = nan;` in
+        run_ecco_v_RHI_spol_gridded.m), used to suppress near-surface
+        ground/ocean clutter. Masks on ALTITUDE (coords_z), not AGL --
+        topo is not subtracted, matching MATLAB. The caller's dbz array is
+        never mutated (a masked copy is used internally). Default False
+        preserves the historical behavior of this function (no masking),
+        which matches drivers like the SeaPol RHI that leave DBZ unmasked.
     return_intermediates : bool
         If True, also compute and attach `fitted_dbz`, `detrended_dbz`
         (the per-point local-linear-fit value and detrended/clipped
@@ -220,6 +237,27 @@ def run(dbz: Union[np.ndarray, list],
         sp_x = np.broadcast_to(sp_x_1d[np.newaxis, :], (nz, nx)).copy()
     else:
         sp_x = resolve_spacing(coords_x, axis=1, mode=coord_mode)
+
+    # --- optional pre-texture surface-echo removal (surfAltLim masking) ---
+    # Faithful port of the driver-level step in the real ECCO-V MATLAB
+    # scripts, e.g. run_ecco_v_RHI_spol_gridded.m:
+    #     data.DBZ_F(data.Z .* 1000 < surfAltLim) = nan;
+    # applied to reflectivity BEFORE f_reflTexture. This is a SEPARATE role
+    # from surf_alt_lim's use inside class_sub_2d (the near-surface
+    # convective test); the MATLAB drivers apply this masking on the raw
+    # vertical ALTITUDE coordinate (data.Z / data.asl, MSL), NOT on AGL
+    # (Z - topo). We therefore mask on coords_z, interpreted as altitude
+    # positions in km -- not on `height` and not topo-corrected.
+    #
+    # It is OPT-IN (default off) on purpose: not every reference driver
+    # does it (e.g. the SeaPol RHI driver leaves DBZ unmasked and uses
+    # surfAltLim only in class_sub_2d), so masking unconditionally would
+    # diverge from those cases and silently change already-validated
+    # behavior. Turn it on to reproduce the SPOL/APR3/CloudNet drivers.
+    if remove_surface_echo:
+        alt_km = coords_z if coords_z.ndim == 2 else coords_z[:, np.newaxis]
+        # np.where returns a fresh array -- never mutate the caller's dbz.
+        dbz = np.where(alt_km < (cp.surf_alt_lim / 1000.0), np.nan, dbz)
 
     # WindowSpec: texture slides along X axis; spacing for window resolution is sp_x
     if isinstance(window, WindowSpec) and not window.is_pixel:
