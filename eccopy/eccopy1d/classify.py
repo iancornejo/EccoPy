@@ -214,16 +214,21 @@ def run(dbz: Union[np.ndarray, list],
     spacing_for_window = _resolve_base_spacing(window, spacing)
 
     # 1. Texture
+    # None resolves to no gating here: min_valid_dbz ports a
+    # ConvStratFinder prefilter with no f_reflTexture.m analog. An
+    # explicitly-set value is honoured. See TextureParams.
+    min_valid = tp.resolve_min_valid_dbz(-np.inf)
+
     fitted_dbz = detrended_dbz = None
     if return_intermediates:
         texture, fitted_dbz, detrended_dbz = refl_texture_1d_with_fit(
             dbz, window, spacing=spacing_for_window, dbz_base=tp.dbz_base,
-            kernel_mode=kernel_mode,
+            min_valid_dbz=min_valid, kernel_mode=kernel_mode,
         )
     else:
         texture = refl_texture_1d(
             dbz, window, spacing=spacing_for_window, dbz_base=tp.dbz_base,
-            kernel_mode=kernel_mode,
+            min_valid_dbz=min_valid, kernel_mode=kernel_mode,
         )
 
     # 2. Convectivity

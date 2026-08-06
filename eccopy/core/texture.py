@@ -224,6 +224,7 @@ def refl_texture_1d(dbz: np.ndarray,
                     window: Union[WindowSpec, int],
                     spacing: Optional[np.ndarray] = None,
                     dbz_base: float = 0.0,
+                    min_valid_dbz: float = -np.inf,
                     kernel_mode: str = "uniform") -> np.ndarray:
     """
     Sliding 1-D reflectivity texture along the last axis.
@@ -288,6 +289,10 @@ def refl_texture_1d(dbz: np.ndarray,
         validated) if `window` is a bare pixel radius.
     dbz_base : float
         Subtracted from values before texture is computed.
+    min_valid_dbz : float
+        Values below this are treated as missing before texture is
+        computed. Defaults to -inf (no gating), matching f_reflTexture.m,
+        which has no such prefilter. See TextureParams.min_valid_dbz.
     kernel_mode : {"uniform", "varying"}
         "uniform" (default) — resolve ONE radius from the median of the
             (validated/broadcast) spacing array, applied everywhere.
@@ -307,6 +312,20 @@ def refl_texture_1d(dbz: np.ndarray,
         )
 
     dbz = np.asarray(dbz, dtype=float)
+    # Null out dbz below min_valid_dbz BEFORE any downstream computation,
+    # mirroring refl_texture_2d(). Sub-threshold values left in place would
+    # otherwise participate as valid neighbours in the window statistic and
+    # inflate texture near the edges of valid-data regions.
+    #
+    # The default is -inf (no gating), NOT 0.0 as in the 2-D/3-D path:
+    # min_valid_dbz ports ConvStratFinder::computeEchoType()'s prefilter,
+    # which has no analog in f_reflTexture.m. EccoPy-2D-V agrees with real
+    # MATLAB ECCO-V output at 99.4-100% without it; gating at 0 dBZ moves
+    # that output by ~13%. Callers that want the C++ behaviour set it
+    # explicitly. See TextureParams.min_valid_dbz.
+    if min_valid_dbz > -np.inf:
+        dbz = np.where(dbz < min_valid_dbz, np.nan, dbz)
+
     orig_shape = dbz.shape
     n = orig_shape[-1]
 
@@ -514,6 +533,7 @@ def refl_texture_1d_with_fit(dbz: np.ndarray,
                              window: Union[WindowSpec, int],
                              spacing: Optional[np.ndarray] = None,
                              dbz_base: float = 0.0,
+                             min_valid_dbz: float = -np.inf,
                              kernel_mode: str = "uniform"):
     """
     DEBUG-ONLY entry point: same texture calculation as refl_texture_1d,
@@ -548,6 +568,20 @@ def refl_texture_1d_with_fit(dbz: np.ndarray,
         )
 
     dbz = np.asarray(dbz, dtype=float)
+    # Null out dbz below min_valid_dbz BEFORE any downstream computation,
+    # mirroring refl_texture_2d(). Sub-threshold values left in place would
+    # otherwise participate as valid neighbours in the window statistic and
+    # inflate texture near the edges of valid-data regions.
+    #
+    # The default is -inf (no gating), NOT 0.0 as in the 2-D/3-D path:
+    # min_valid_dbz ports ConvStratFinder::computeEchoType()'s prefilter,
+    # which has no analog in f_reflTexture.m. EccoPy-2D-V agrees with real
+    # MATLAB ECCO-V output at 99.4-100% without it; gating at 0 dBZ moves
+    # that output by ~13%. Callers that want the C++ behaviour set it
+    # explicitly. See TextureParams.min_valid_dbz.
+    if min_valid_dbz > -np.inf:
+        dbz = np.where(dbz < min_valid_dbz, np.nan, dbz)
+
     orig_shape = dbz.shape
     n = orig_shape[-1]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field
+from typing import Optional
 from .window import WindowSpec
 
 
@@ -26,7 +27,10 @@ class TextureParams:
     use_dbz_col_max      : bool        Use col-max DBZ for texture
                                        (same texture copied to all levels).
                                        Default: False.
-    min_valid_dbz        : float       DBZ below this → missing.       Default: 0.
+    min_valid_dbz        : float|None  DBZ below this → missing, applied
+                                       before texture is computed.
+                                       Default: None = use each module's
+                                       reference default (see below).
     dbz_for_echo_tops    : float       DBZ threshold for echo tops.    Default: 18.
     """
 
@@ -42,5 +46,26 @@ class TextureParams:
     texture_limit_low: float = 0.0
     texture_limit_high: float = 30.0
     use_dbz_col_max:   bool  = False   # new
-    min_valid_dbz:     float = 0.0
+    min_valid_dbz:     Optional[float] = None
     dbz_for_echo_tops: float = 18.0    # new
+
+    def resolve_min_valid_dbz(self, module_default: float) -> float:
+        """
+        Resolve `min_valid_dbz` for a calling module.
+
+        `None` means "use this module's reference default", which differs
+        because the parameter has a different provenance in each family:
+
+          eccopy2d_h / eccopy3d : 0.0
+              ConvStratFinder::computeEchoType() prefilters the volume at
+              this threshold before computing anything downstream.
+          eccopy1d / eccopy2d_v : -inf (no gating)
+              f_reflTexture.m has no equivalent prefilter. EccoPy-2D-V
+              agrees with real MATLAB ECCO-V output at 99.4-100% without
+              one; gating at 0 dBZ moves that output by roughly 13%.
+
+        Any value the caller sets explicitly is honoured by every module.
+        """
+        if self.min_valid_dbz is None:
+            return module_default
+        return float(self.min_valid_dbz)

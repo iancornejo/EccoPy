@@ -231,7 +231,7 @@ def run(dbz: Union[np.ndarray, list],
         dy=sp_y,
         dx=sp_x,
         base_dbz=tp.dbz_base,
-        min_valid_dbz=tp.min_valid_dbz,
+        min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
         min_frac_texture=tp.min_frac_texture,
         min_frac_fit=tp.min_frac_fit,
         n_threads=1,
@@ -272,7 +272,7 @@ def run(dbz: Union[np.ndarray, list],
         from ..core.debug import refl_texture_2d_field_debug
         fitted_dbz, detrended_dbz, _ = refl_texture_2d_field_debug(
             dbz, radius_km, dy=sp_y, dx=sp_x,
-            base_dbz=tp.dbz_base, min_valid_dbz=tp.min_valid_dbz,
+            base_dbz=tp.dbz_base, min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
             min_frac_texture=tp.min_frac_texture, min_frac_fit=tp.min_frac_fit,
             kernel_mode=kernel_mode,
         )
