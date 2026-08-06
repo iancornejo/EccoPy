@@ -9,7 +9,7 @@ pip install -e ".[dev,plot]"
 pytest eccopy/tests/
 ```
 
-All 305 tests should pass before and after any change. If you add a
+All 326 tests should pass before and after any change. If you add a
 feature, add tests for it in `eccopy/tests/` — see the existing files
 for the project's style (plain `pytest` functions, synthetic data
 generated in the test file itself, no fixtures files).
