@@ -58,6 +58,26 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **`min_valid_dbz` is now honoured by `eccopy1d` and `eccopy2d_v`.** It
+  was declared in `TextureParams` and consumed by `eccopy2d_h`/`eccopy3d`,
+  but `refl_texture_1d()` had no such parameter, so setting it silently
+  did nothing on the 1-D and 2-D-V paths. Both 1-D texture entry points
+  now accept and apply it.
+
+  Its default changes from `0.0` to `None`, meaning "use the calling
+  module's reference default", resolved by
+  `TextureParams.resolve_min_valid_dbz()`:
+
+  | Module | `None` resolves to | Provenance |
+  |---|---|---|
+  | `eccopy2d_h`, `eccopy3d` | `0.0` | `ConvStratFinder::computeEchoType()` prefilter |
+  | `eccopy1d`, `eccopy2d_v` | no gating | `f_reflTexture.m` has no prefilter |
+
+  An explicitly-set value is honoured by all four modules. Output with
+  default parameters is byte-identical to the previous release in every
+  module. Gating the 2-D-V path at 0 dBZ moves its output by roughly 13%,
+  which is why the default must not do so: that module agrees with real
+  MATLAB ECCO-V output at 99.4-100% without gating.
 - **`min_overlap_for_convective_clumps` now raises `NotImplementedError`
   for any value other than 1.** The parameter was declared and documented
   but never read by any code, so a non-default value silently did nothing.
