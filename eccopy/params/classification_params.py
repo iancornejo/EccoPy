@@ -52,7 +52,7 @@ class ClassificationParams:
 
     Shared
     ------
-    surf_alt_lim : float       Near-surface altitude limit [m].         Default: 200
+    surf_alt_lim : float       Near-surface altitude limit [m].         Default: 0
                                Two roles, both keyed off this one value:
                                (1) class_sub_2d's near-surface convective
                                test (dist_asl_topo < 500 + surf_alt_lim),
@@ -111,7 +111,7 @@ class ClassificationParams:
     enlarge_conv:  int  = 5    # FIXED: was 3, confirmed against MATLAB
                                 # source to be wrong; real MATLAB default
                                 # is 5, matching enlarge_mixed
-    surf_alt_lim:  float = 200.0
+    surf_alt_lim:  float = 0.0
 
     # Point-wise convectivity thresholds
     min_convectivity_for_convective: float = 0.5
