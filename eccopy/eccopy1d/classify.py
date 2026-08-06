@@ -257,7 +257,11 @@ def run(dbz: Union[np.ndarray, list],
         else:
             min_len_base = mcl.base_value
             spacing_base_len = _resolve_base_spacing(mcl, spacing)
-        echo = filter_short_convective_runs_1d(echo, spacing_base_len, min_len_base)
+        # demote to basic Mixed (2), not CATEGORY_MIXED (25): eccopy1d's
+        # echo_type is the basic {1,2,3} scheme, so the 3-D clump constant
+        # would inject stray 25s that break {1,2,3} consumers / colormaps.
+        echo = filter_short_convective_runs_1d(
+            echo, spacing_base_len, min_len_base, demote_to=2)
 
     return Result1D(echo_type=echo, convectivity=conv, texture=texture,
                     fitted_dbz=fitted_dbz, detrended_dbz=detrended_dbz)
