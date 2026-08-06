@@ -6,12 +6,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`eccopy.__version__`**, single-sourced from `eccopy/__init__.py`.
+  `pyproject.toml` now declares `dynamic = ["version"]` and reads the
+  attribute, so the version is defined in exactly one place.
 - **`eccopy.core.disk`**: pure-Python generation of MATLAB
   `strel('disk', r)` neighborhoods and their `getsequence()`
   decompositions (the default `n=4` periodic-line octagon, Adams 1993),
   for **any** radius. Validated bit-exact against the MATLAB-exported
   ground truth (`tests/test_disk_generator.py`, 84 cases). An `n=0`
   Euclidean-disk option is exposed for callers who explicitly want it.
+
+### Fixed
+- `pyproject.toml` `Repository` URL and the `CHANGELOG` release link
+  pointed at upstream/placeholder repositories rather than EccoPy's own.
+- `CONTRIBUTING.md` quoted a stale test count.
+- `build` added to the `dev` extra: `test_packaging.py` `importorskip`s
+  it, so a documented dev install previously skipped the wheel-build
+  check and reported a lower test count than a full run.
 
 ### Changed
 - **`enlarge_mixed`/`enlarge_conv` are no longer limited to pre-exported
@@ -117,4 +128,4 @@ utilities.
   array and will not numerically match `Result3D.n_clumps` (computed
   earlier, on convectivity, by the dual-threshold clumping algorithm).
 
-[0.1.0]: https://github.com/NCAR/eccopy/releases/tag/v0.1.0
+[0.1.0]: https://github.com/iancornejo/EccoPy/releases/tag/v0.1.0

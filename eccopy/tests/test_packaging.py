@@ -90,3 +90,26 @@ def test_core_getattr_raises_for_unknown_name():
     import eccopy.core as core
     with pytest.raises(AttributeError):
         getattr(core, "not_a_real_attribute")
+
+
+def test_version_is_declared_and_pep440():
+    """`eccopy.__version__` exists and is a plain PEP 440 release string."""
+    import re
+    import eccopy
+
+    assert isinstance(eccopy.__version__, str)
+    assert re.fullmatch(r"\d+\.\d+\.\d+([abc]\d+|\.dev\d+|\.post\d+)?",
+                        eccopy.__version__), eccopy.__version__
+
+
+def test_pyproject_sources_version_from_package_attribute():
+    """
+    The version is single-sourced: pyproject declares it dynamic and reads
+    `eccopy.__version__`, so there is exactly one place to bump on release.
+    """
+    text = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
+
+    assert 'dynamic = ["version"]' in text
+    assert 'attr = "eccopy.__version__"' in text
+    # A static `version = "..."` under [project] would silently win instead.
+    assert "\nversion = \"" not in text

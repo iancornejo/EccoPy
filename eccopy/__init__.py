@@ -30,11 +30,14 @@ Quick start
     echo = result.echo_type           # (Z, Y, X), echo type codes
 """
 
+__version__ = "0.1.0"
+
 from . import eccopy1d, eccopy2d_v, eccopy2d_h, eccopy3d
 from . import stats
 from .core.coords import haversine_distance, latlon_to_xy_spacing, resolve_spacing
 
 __all__ = [
+    "__version__",
     "eccopy1d", "eccopy2d_v", "eccopy2d_h", "eccopy3d", "stats",
     "haversine_distance", "latlon_to_xy_spacing", "resolve_spacing",
 ]

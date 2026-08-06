@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eccopy"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Data-agnostic Python implementation of the ECCO / ConvStratFinder radar echo classification algorithm (1-D, 2-D-V, 2-D-H, 3-D). Operates purely on numpy arrays — no file I/O."
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
@@ -37,11 +37,16 @@ dev = [
     "pytest>=7.4",
     "pytest-cov",
     "matplotlib>=3.7",
+    # test_packaging.py builds a real wheel; without this it importorskips.
+    "build>=1.0",
 ]
 
 [project.urls]
-Repository = "https://github.com/NCAR/lrose-ecco"
+Repository = "https://github.com/iancornejo/EccoPy"
 "Algorithm Reference" = "https://doi.org/10.1175/JTECH-D-22-0019.1"
+
+[tool.setuptools.dynamic]
+version = { attr = "eccopy.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]
