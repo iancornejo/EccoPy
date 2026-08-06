@@ -850,7 +850,7 @@ def class_sub_2d(class_in: np.ndarray,
                   temp: np.ndarray,
                   elev: Optional[np.ndarray] = None,
                   first_row: Optional[int] = None,
-                  surf_alt_lim: float = 200.0) -> np.ndarray:
+                  surf_alt_lim: float = 0.0) -> np.ndarray:
     """
     Sub-classification into echo type codes. Faithful port of the REAL
     f_classSub.m -- this replaces an earlier version of this function

@@ -632,18 +632,16 @@ pipeline stages — see that function's docstring).
 
 ## Plotting
 
-Each module has an optional `plot.py` with a `plot_result()` function
-(requires `pip install "eccopy[plot]"`):
+EccoPy does not draw figures for you. Every output array has the same
+shape as the reflectivity you passed in, so whatever you already use to
+plot your own data works unchanged on `result.echo_type`,
+`result.convectivity`, and `result.texture`.
 
-```python
-from eccopy.eccopy3d.plot import plot_result
-plot_result(result, dbz, coords_y=y_km, coords_x=x_km, coords_z=z_km,
-           outfile="result.png")
-```
-
-For custom figures, `eccopy.core.colormaps` provides matching
-colormaps/norms/labels for basic classification, sub-classification, and
-convectivity:
+What EccoPy does provide is `eccopy.core.colormaps` (requires
+`pip install "eccopy[plot]"`), which supplies matching colormaps, norms
+and labels so those arrays render correctly — the echo-type codes are not
+contiguous, and the convectivity colormap breaks exactly at the
+classification thresholds:
 
 ```python
 from eccopy.core.colormaps import (
@@ -653,10 +651,17 @@ from eccopy.core.colormaps import (
 )
 ```
 
+`remap_echo_type()` converts the non-contiguous codes (14/16/18/25/...)
+into the contiguous indices those colormaps expect, and
+`draw_window_ring()` overlays the texture-window footprint on a map.
+
 The basic and sub-classified colormaps assign the **same color** to
 their shared categories (Stratiform &harr; Strat Mid, Mixed &harr;
 Mixed, Convective &harr; Conv), so panels stay visually consistent
 whether a given case ends up basic-only or sub-classified.
+
+The workflow notebooks under `notebooks/` show complete figures built
+this way, and are the place to look for a worked example.
 
 `convectivity_cmap()` ramps continuously *within* each class but has
 **hard breaks** at the two classification thresholds — strat/mixed

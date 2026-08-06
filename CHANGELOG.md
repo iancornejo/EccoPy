@@ -6,6 +6,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`notebooks/eccopy2d_v_workflow.ipynb`** — full walkthrough of the
+  2-D-V pipeline on the bundled S-Pol RHI: every intermediate array, every
+  tunable parameter with its direction, mechanism and a measured
+  sensitivity tier, statistics, and a reusable parameter-sweep helper.
+  Replaces the synthetic-data notebook under `workflow_examples/`.
 - **Sample datasets** under `notebooks/data/` (4.5 MB total), one per
   module, with `make_sample_data.py` documenting provenance and subset
   selection and a `README.md` carrying attribution. Committed to the
@@ -21,6 +26,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Euclidean-disk option is exposed for callers who explicitly want it.
 
 ### Removed
+- **The four `plot.py` modules and their `plot_result()` functions**
+  (`eccopy1d`, `eccopy2d_h`, `eccopy2d_v`, `eccopy3d`), plus
+  `tests/test_plot_result.py`. Every EccoPy output has the same shape as
+  the reflectivity input, so any code that can plot the input can plot the
+  result; the four modules were 400 lines of near-duplicate layout opinion
+  (38-53% pairwise line similarity) that had to be fixed four times over
+  whenever anything changed. `eccopy.core.colormaps` is **retained** --
+  the echo-type code/colour/label mapping and the threshold-aligned
+  convectivity colormap are the parts with real value. The workflow
+  notebooks now serve as the plotting reference.
 - **`topo` / `topo_km` from the 3-D path** (`eccopy3d.run()`,
   `find_clumps_3d()`, `set_echo_type_3d()`). It performed a literal
   `height_km - topo_km` AGL subtraction with no analog in
@@ -58,6 +73,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **`ClassificationParams.surf_alt_lim` now defaults to `0.0` m** (was
+  `200.0`), so no near-surface adjustment is applied unless a caller asks
+  for one. `class_sub_2d()`'s own default changes to match. The parameter
+  sets the near-surface convective test at `echo base < 500 m +
+  surf_alt_lim`, so convection based between 500 m and 700 m AGL now
+  classifies as elevated (32) rather than surface-based; outside that band
+  nothing changes, and the bundled S-Pol case is unaffected.
 - **`min_valid_dbz` is now honoured by `eccopy1d` and `eccopy2d_v`.** It
   was declared in `TextureParams` and consumed by `eccopy2d_h`/`eccopy3d`,
   but `refl_texture_1d()` had no such parameter, so setting it silently

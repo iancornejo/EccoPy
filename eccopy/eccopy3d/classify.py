@@ -58,7 +58,7 @@ class Result3D:
     n_clumps:        int
     # Physical radius (km) of the texture window actually used, resolved
     # from the `window` argument against the grid spacing. Available for
-    # plotting the window footprint (see plot_result(show_window=True)).
+    # plotting the window footprint (see core.colormaps.draw_window_ring()).
     # None only for a bare-pixel window on a unit-agnostic grid.
     texture_radius:  Optional[float] = None
     # Populated ONLY when run(..., return_intermediates=True, levels=[...])
