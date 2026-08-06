@@ -6,6 +6,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`notebooks/eccopy2d_h_workflow.ipynb`** — full walkthrough of the 2-D-H
+  pipeline on the bundled MRMS composite: lat/lon to physical spacing via
+  `latlon_to_xy_spacing()`, the `kernel_mode` comparison (this is the one
+  bundled dataset with genuinely non-uniform spacing), 2-D clumping, and a
+  sweep helper reporting clump count alongside echo-type change.
 - **`notebooks/eccopy3d_workflow.ipynb`** — full walkthrough of the 3-D
   pipeline on the bundled WRF volume: clump-based sub-typing, the int16
   sentinel convention, every parameter the 3-D path consumes with a
