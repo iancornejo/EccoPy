@@ -3,6 +3,30 @@
 All notable changes to EccoPy are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **`eccopy.core.disk`**: pure-Python generation of MATLAB
+  `strel('disk', r)` neighborhoods and their `getsequence()`
+  decompositions (the default `n=4` periodic-line octagon, Adams 1993),
+  for **any** radius. Validated bit-exact against the MATLAB-exported
+  ground truth (`tests/test_disk_generator.py`, 84 cases). An `n=0`
+  Euclidean-disk option is exposed for callers who explicitly want it.
+
+### Changed
+- **`enlarge_mixed`/`enlarge_conv` are no longer limited to pre-exported
+  radii.** `_disk()` / `_load_decomp()` generate the strel and closing
+  decomposition on demand via `eccopy.core.disk` (using a bundled `.mat`
+  as a byte-identical override when present), so previously-unusable
+  values like `enlarge_conv=15` now work instead of raising
+  `FileNotFoundError`. Results for the previously-validated radii `{3, 5}`
+  are byte-identical.
+- **`resolve_enlarge_radius_px()`** now resolves to the exact rounded
+  pixel radius (no snapping to a bundled set, no mismatch warning), since
+  any radius is generatable.
+- The bundled `disk_strel`/`disk_decomp` `.mat` files are demoted from a
+  runtime dependency to optional bit-exact regression fixtures.
+
 ## [0.1.0] — v0.1 pre-release
 
 First public pre-release. Four data-agnostic, array-in/array-out

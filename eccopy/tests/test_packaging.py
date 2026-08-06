@@ -5,6 +5,12 @@ These guard against two real bugs found while preparing v0.1 for
 GitHub/conda release:
   1. The .mat disk-strel/disk-decomp reference data files were silently
      dropped from built wheels (no package-data configuration existed).
+     NOTE: since eccopy.core.disk now generates disk shapes for any radius,
+     these .mat files are no longer a runtime dependency -- classification
+     falls back to the (bit-exact) generator if they are absent. They are
+     kept as ground-truth regression fixtures for test_disk_generator.py,
+     and this test still guards that they ship so that fixture check can
+     run against an installed copy.
   2. `import eccopy` transitively required matplotlib even though it's
      declared as an optional "plot" extra, because core/__init__.py
      imported colormap functions eagerly.

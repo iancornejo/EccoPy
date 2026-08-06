@@ -75,19 +75,28 @@ def test_class_basic_isotropic_runs_at_validated_radius():
     assert 3 in result  # the embedded high-convectivity block should register
 
 
-def test_class_basic_isotropic_unvalidated_radius_raises_clear_error():
+def test_class_basic_isotropic_arbitrary_radius_now_supported():
+    # Radii without a bundled MATLAB .mat used to raise FileNotFoundError;
+    # eccopy.core.disk now generates the strel/decomposition on demand
+    # (bit-exact to MATLAB -- see test_disk_generator.py), so any radius
+    # works. enlarge=8 needs disk r8 + decomposition r24/r40, none of
+    # which were ever exported.
     from eccopy.core.classification import class_basic_isotropic
-    conv = np.full((20, 20), 0.9)
-    with pytest.raises(FileNotFoundError):
-        class_basic_isotropic(conv, strat_mixed=0.4, mixed_conv=0.5,
-                              enlarge_mixed=2, enlarge_conv=2)
+    conv = np.full((60, 60), 0.1)
+    conv[25:35, 25:35] = 0.9
+    result = class_basic_isotropic(conv, strat_mixed=0.4, mixed_conv=0.5,
+                                   enlarge_mixed=8, enlarge_conv=8)
+    assert result.shape == conv.shape
+    assert set(np.unique(result[~np.isnan(result)])).issubset({1, 2, 3})
+    assert 3 in result
 
 
 # ---------------------------------------------------------------------------
 # available_enlarge_radii_px() / resolve_enlarge_radius_px()
 # ---------------------------------------------------------------------------
 
-def test_available_enlarge_radii_px_matches_bundled_files():
+def test_available_enlarge_radii_px_lists_bundled_fixtures():
+    # No longer a hard limit -- just which radii have a ground-truth fixture.
     from eccopy.core.classification import available_enlarge_radii_px
     assert available_enlarge_radii_px() == [3, 5, 15, 25]
 
@@ -101,21 +110,27 @@ def test_resolve_enlarge_radius_px_exact_match_no_warning():
     assert r == 5
 
 
-def test_resolve_enlarge_radius_px_picks_nearest_available():
+def test_resolve_enlarge_radius_px_resolves_exact_radius_no_snapping():
+    # Any radius is now generatable, so resolution is exact (rounded), not
+    # snapped to a bundled set -- and never warns.
     from eccopy.core.classification import resolve_enlarge_radius_px
-    # 6 km at 1 km/px = 6 px target -> nearest bundled is 5
-    r = resolve_enlarge_radius_px(target_km=6.0, representative_spacing_km=1.0)
-    assert r == 5
-    # 20 km at 1 km/px = 20 px target -> nearest bundled is 15 or 25 (both dist 5) -> min() picks 15 (first)
-    r2 = resolve_enlarge_radius_px(target_km=20.0, representative_spacing_km=1.0)
-    assert r2 in (15, 25)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        # 6 km at 1 km/px -> 6 px exactly (old behaviour snapped to 5)
+        assert resolve_enlarge_radius_px(target_km=6.0, representative_spacing_km=1.0) == 6
+        # 20 km at 1 km/px -> 20 px exactly (old behaviour snapped to 15/25)
+        assert resolve_enlarge_radius_px(target_km=20.0, representative_spacing_km=1.0) == 20
+        # far-from-any-fixture target that used to warn now resolves cleanly
+        assert resolve_enlarge_radius_px(target_km=100.0, representative_spacing_km=1.0) == 100
 
 
-def test_resolve_enlarge_radius_px_warns_on_large_mismatch():
+def test_resolve_enlarge_radius_px_rounds_and_clamps():
     from eccopy.core.classification import resolve_enlarge_radius_px
-    with pytest.warns(UserWarning):
-        resolve_enlarge_radius_px(target_km=100.0, representative_spacing_km=1.0,
-                                  param_name="enlarge_conv")
+    assert resolve_enlarge_radius_px(target_km=5.4, representative_spacing_km=1.0) == 5
+    assert resolve_enlarge_radius_px(target_km=5.6, representative_spacing_km=1.0) == 6
+    # sub-pixel target clamps to a minimum radius of 1
+    assert resolve_enlarge_radius_px(target_km=0.1, representative_spacing_km=1.0) == 1
 
 
 def test_resolve_enlarge_radius_px_invalid_spacing_raises():
@@ -131,6 +146,6 @@ def test_resolve_enlarge_radius_px_invalid_spacing_raises():
 def test_resolve_enlarge_radius_px_respects_representative_spacing():
     from eccopy.core.classification import resolve_enlarge_radius_px
     # Same target_km, different spacing -> different pixel-space target -> different result.
-    r_fine = resolve_enlarge_radius_px(target_km=5.0, representative_spacing_km=0.5)   # target 10 px
-    r_coarse = resolve_enlarge_radius_px(target_km=5.0, representative_spacing_km=2.5)  # target 2 px
-    assert r_fine != r_coarse
+    r_fine = resolve_enlarge_radius_px(target_km=5.0, representative_spacing_km=0.5)   # 10 px
+    r_coarse = resolve_enlarge_radius_px(target_km=5.0, representative_spacing_km=2.5)  # 2 px
+    assert r_fine == 10 and r_coarse == 2 and r_fine != r_coarse
