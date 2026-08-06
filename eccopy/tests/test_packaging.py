@@ -16,6 +16,7 @@ GitHub/conda release:
      imported colormap functions eagerly.
 """
 
+import re
 import subprocess
 import sys
 import zipfile
@@ -94,7 +95,6 @@ def test_core_getattr_raises_for_unknown_name():
 
 def test_version_is_declared_and_pep440():
     """`eccopy.__version__` exists and is a plain PEP 440 release string."""
-    import re
     import eccopy
 
     assert isinstance(eccopy.__version__, str)
@@ -113,3 +113,32 @@ def test_pyproject_sources_version_from_package_attribute():
     assert 'attr = "eccopy.__version__"' in text
     # A static `version = "..."` under [project] would silently win instead.
     assert "\nversion = \"" not in text
+
+
+def test_no_scikit_learn_dependency():
+    """
+    scikit-learn is not a runtime dependency and is not imported anywhere
+    in the package. It was previously pulled in by a single unused helper.
+    """
+    text = (PKG_ROOT / "pyproject.toml").read_text()
+    assert "scikit-learn" not in text
+    assert "sklearn" not in text
+
+    offenders = [
+        path.relative_to(PKG_ROOT)
+        for path in (PKG_ROOT / "eccopy").rglob("*.py")
+        if re.search(r"^\s*(import sklearn|from sklearn)", path.read_text(),
+                     re.MULTILINE)
+    ]
+    assert not offenders, f"sklearn imported in: {offenders}"
+
+
+def test_every_public_core_name_resolves():
+    """
+    Everything advertised in `eccopy.core.__all__` is actually reachable --
+    guards against an export outliving the object it names.
+    """
+    from eccopy import core
+
+    missing = [name for name in core.__all__ if not hasattr(core, name)]
+    assert not missing, f"exported but unresolvable: {missing}"

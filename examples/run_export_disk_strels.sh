@@ -6,16 +6,16 @@
 #
 # Usage:
 #   ./run_export_disk_strels.sh
-#   ./run_export_disk_strels.sh "3,5,15,25" ./disk_strels
+#   ./run_export_disk_strels.sh "3,5,15,25" ../eccopy/core/data/disk_strels
 #
 # Args (optional): [radii_csv] [outdir]
 # Defaults: radii = 3,5,15,25 (enlarge_mixed=5, enlarge_conv=5 case);
-#           outdir = ./disk_strels
+#           outdir = ../eccopy/core/data/disk_strels (where the fixtures live)
 
 set -e
 
 export RADII="${1:-3,5,15,25}"
-export OUTDIR="${2:-./disk_strels}"
+export OUTDIR="${2:-../eccopy/core/data/disk_strels}"
 
 echo "Exporting strel('disk', r) masks for radii: $RADII"
 echo "Output directory: $OUTDIR"

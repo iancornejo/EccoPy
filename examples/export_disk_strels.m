@@ -10,7 +10,7 @@
 %
 % Usage (see run_export_disk_strels.sh):
 %   export RADII="3,5,15,25"
-%   export OUTDIR="./disk_strels"
+%   export OUTDIR="../eccopy/core/data/disk_strels"
 %   matlab -nodisplay -nosplash -r "run('export_disk_strels.m'); exit"
 %
 % Each output file disk_strel_r<R>.mat contains one variable:
