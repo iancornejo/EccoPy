@@ -40,9 +40,23 @@ SUB_CONVECTIVE_CODES      = frozenset({30, 32, 34, 36, 38})
 _CATEGORY_ALIASES = {"strat": "stratiform", "conv": "convective"}
 
 
+def _valid_mask(echo_type: np.ndarray) -> np.ndarray:
+    """
+    Points that carry a classification.
+
+    Modules disagree on how they mark "no echo here": eccopy2d_h and
+    eccopy2d_v return float arrays with NaN, while eccopy3d returns int16
+    with CATEGORY_MISSING (0) as the sentinel. Testing only for NaN counts
+    every sentinel voxel as valid, which silently inflates the denominator
+    of every fraction computed from a 3-D result. Treat both as missing.
+    """
+    arr = np.asarray(echo_type, dtype=float)
+    return ~np.isnan(arr) & (arr != 0)
+
+
 def _is_basic(echo_type: np.ndarray) -> bool:
     """Auto-detect basic (1/2/3) vs sub-classified codes, like remap_echo_type()."""
-    valid = echo_type[~np.isnan(echo_type)]
+    valid = np.asarray(echo_type, dtype=float)[_valid_mask(echo_type)]
     if valid.size == 0:
         return True
     present = set(np.unique(valid).astype(int).tolist())
@@ -87,13 +101,13 @@ def echo_type_fractions(echo_type: np.ndarray) -> dict:
     Returns
     -------
     dict with keys 'stratiform', 'mixed', 'convective' (fractions, 0-1)
-    and 'n_valid' (count of non-NaN points the fractions are computed
-    over). Sub-classified arrays are collapsed to these three top-level
+    and 'n_valid' (count of classified points the fractions are computed
+    over -- NaN and the eccopy3d int16 sentinel 0 both count as missing). Sub-classified arrays are collapsed to these three top-level
     categories -- use codes_for_category()/np.isin() directly if you
     want e.g. the Stratiform-Low fraction specifically.
     """
     echo_type = np.asarray(echo_type, dtype=float)
-    valid = ~np.isnan(echo_type)
+    valid = _valid_mask(echo_type)
     n_valid = int(np.sum(valid))
     out = {"n_valid": n_valid}
     for cat in ("stratiform", "mixed", "convective"):
@@ -106,7 +120,7 @@ def convective_percentage(echo_type: np.ndarray,
                           codes: Optional[Iterable[int]] = None) -> float:
     """Percentage (0-100) of valid points classified Convective (any sub-type)."""
     echo_type = np.asarray(echo_type, dtype=float)
-    n_valid = int(np.sum(~np.isnan(echo_type)))
+    n_valid = int(np.sum(_valid_mask(echo_type)))
     if n_valid == 0:
         return float("nan")
     mask = _mask_for(echo_type, "convective", codes)
@@ -117,7 +131,7 @@ def stratiform_percentage(echo_type: np.ndarray,
                           codes: Optional[Iterable[int]] = None) -> float:
     """Percentage (0-100) of valid points classified Stratiform (any sub-type)."""
     echo_type = np.asarray(echo_type, dtype=float)
-    n_valid = int(np.sum(~np.isnan(echo_type)))
+    n_valid = int(np.sum(_valid_mask(echo_type)))
     if n_valid == 0:
         return float("nan")
     mask = _mask_for(echo_type, "stratiform", codes)
@@ -128,7 +142,7 @@ def mixed_percentage(echo_type: np.ndarray,
                      codes: Optional[Iterable[int]] = None) -> float:
     """Percentage (0-100) of valid points classified Mixed."""
     echo_type = np.asarray(echo_type, dtype=float)
-    n_valid = int(np.sum(~np.isnan(echo_type)))
+    n_valid = int(np.sum(_valid_mask(echo_type)))
     if n_valid == 0:
         return float("nan")
     mask = _mask_for(echo_type, "mixed", codes)

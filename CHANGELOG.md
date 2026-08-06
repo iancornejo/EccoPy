@@ -6,6 +6,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`notebooks/eccopy3d_workflow.ipynb`** — full walkthrough of the 3-D
+  pipeline on the bundled WRF volume: clump-based sub-typing, the int16
+  sentinel convention, every parameter the 3-D path consumes with a
+  measured sensitivity tier, and a sweep helper that reports clump count
+  alongside echo-type change.
 - **`notebooks/eccopy2d_v_workflow.ipynb`** — full walkthrough of the
   2-D-V pipeline on the bundled S-Pol RHI: every intermediate array, every
   tunable parameter with its direction, mechanism and a measured
@@ -26,6 +31,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Euclidean-disk option is exposed for callers who explicitly want it.
 
 ### Removed
+- **`VerticalParams.min_valid_dbz`.** It was read by no code and shadowed
+  `TextureParams.min_valid_dbz`, which is the live parameter the 3-D path
+  actually consumes -- so setting it looked correct and did nothing. The
+  reflectivity floor now has exactly one home.
 - **The four `plot.py` modules and their `plot_result()` functions**
   (`eccopy1d`, `eccopy2d_h`, `eccopy2d_v`, `eccopy3d`), plus
   `tests/test_plot_result.py`. Every EccoPy output has the same shape as
@@ -62,6 +71,30 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `eccopy/core/data/disk_strels/`.
 
 ### Fixed
+- **`eccopy.stats` miscounted every `eccopy3d` result.** The validity test
+  was `~np.isnan(echo_type)`, but `eccopy3d` returns `int16` with
+  `CATEGORY_MISSING` (0) as its no-echo sentinel rather than NaN, so every
+  sentinel voxel counted as valid. `n_valid` came back as the full array
+  size and all three category fractions were divided by that inflated
+  denominator -- on the bundled WRF volume, convective coverage was
+  reported as 21.5% instead of 33.8%, and the three fractions summed to
+  0.64 rather than 1.0. Affected `echo_type_fractions()`,
+  `convective_percentage()`, `stratiform_percentage()`,
+  `mixed_percentage()`, `codes_for_category()`'s basic/sub auto-detection,
+  and `summarize()`. Float/NaN results from the other three modules were
+  never affected and their numbers are unchanged.
+- **`VerticalParams.vert_levels_type` was a silent no-op.** It was
+  declared, typed and documented, but read by no code: the height-vs-
+  temperature choice was made implicitly by which array the caller
+  supplied, so `vert_levels_type="by_temp"` did nothing whenever a
+  `height` field was also passed. It is now authoritative --
+  `"by_temp"` assigns vertical levels from temperature and emits a
+  `UserWarning` stating that the supplied `height` is not used for that
+  purpose, and raises `ValueError` if no `temp` field is given. Passing
+  `temp` alone under the default `"by_height"` still falls through to
+  temperature silently, since that is an unambiguous request rather than
+  a mistake. Default-parameter output is byte-identical to the previous
+  release.
 - `pyproject.toml` `Repository` URL and the `CHANGELOG` release link
   pointed at upstream/placeholder repositories rather than EccoPy's own.
 - `CONTRIBUTING.md` quoted a stale test count.
@@ -73,6 +106,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **`VerticalParams.min_valid_height` / `max_valid_height` are now
+  implemented.** Both were declared but read by no code. Levels whose
+  height falls outside the band are treated as missing *before* texture is
+  computed, so excluded data cannot leak back in through the texture
+  kernel -- matching ConvStratFinder, and verified equal to pre-masking the
+  input by hand. The band is applied against the `height` field when one is
+  supplied, otherwise `coords_z`. The defaults (0 to 25 km) span any
+  realistic radar or model grid, so default-parameter output is
+  byte-identical to the previous release.
 - **`ClassificationParams.surf_alt_lim` now defaults to `0.0` m** (was
   `200.0`), so no near-surface adjustment is applied unless a caller asks
   for one. `class_sub_2d()`'s own default changes to match. The parameter

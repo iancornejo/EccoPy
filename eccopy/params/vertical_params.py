@@ -30,7 +30,15 @@ class VerticalParams:
 
     min_valid_height : float   km   Default:  0.0
     max_valid_height : float   km   Default: 25.0
-    min_valid_dbz    : float   dBZ  Default:  0.0
+        Vertical band the analysis is restricted to. Levels whose height
+        falls outside are treated as missing before texture is computed,
+        matching ConvStratFinder. The defaults span any realistic radar or
+        model grid, so they are inert unless deliberately narrowed.
+
+    NOTE: the reflectivity floor lives on TextureParams.min_valid_dbz, not
+    here. VerticalParams previously carried a second field of the same name
+    that no code read; it has been removed rather than left as a way to set
+    the wrong one.
 
     NOTE on the "-25 — FIXED" / "4.0 — FIXED" comments above: these
     describe changes made against the 3-D C++ ConvStratFinder reference
@@ -50,4 +58,3 @@ class VerticalParams:
 
     min_valid_height: float = 0.0
     max_valid_height: float = 25.0
-    min_valid_dbz:    float = 0.0

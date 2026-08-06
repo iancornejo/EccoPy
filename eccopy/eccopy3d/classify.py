@@ -33,6 +33,7 @@ Typical usage
 """
 
 from __future__ import annotations
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -236,6 +237,25 @@ def run(dbz: Union[np.ndarray, list],
     else:
         radius_km = float(window)
 
+    # 0. Restrict the analysis to the valid height band, matching
+    # ConvStratFinder's min/max valid height. Applied BEFORE texture so
+    # excluded levels cannot contribute to any downstream statistic. Uses
+    # the `height` field when one is supplied, otherwise the vertical
+    # coordinate. The defaults (0 to 25 km) span any realistic radar or
+    # model grid, so this is inert unless deliberately narrowed.
+    if vp.min_valid_height > -np.inf or vp.max_valid_height < np.inf:
+        if height is not None:
+            height_for_band = np.broadcast_to(
+                np.asarray(height, dtype=float), dbz.shape)
+        else:
+            height_for_band = np.broadcast_to(
+                coords_z_arr.reshape(-1, 1, 1) if coords_z_arr.ndim == 1
+                else np.asarray(coords_z_arr, dtype=float), dbz.shape)
+        outside = ((height_for_band < vp.min_valid_height)
+                   | (height_for_band > vp.max_valid_height))
+        if outside.any():
+            dbz = np.where(outside, np.nan, dbz)
+
     # 1. 2D radial texture per level
     texture, fraction_active = refl_texture_2d(
         dbz,
@@ -260,6 +280,31 @@ def run(dbz: Union[np.ndarray, list],
     height_arr = np.asarray(height, dtype=float) if height is not None else None
     temp_arr = broadcast_temp_field(temp, dbz.shape) if temp is not None else None
     terrain_ht_arr = np.asarray(terrain_ht, dtype=float) if terrain_ht is not None else None
+
+    # Resolve which field assigns vertical levels. find_clumps_3d() and
+    # set_echo_type_3d() both prefer height whenever it is supplied, so
+    # honouring vert_levels_type="by_temp" means withholding height from
+    # them. Do it here rather than inside those functions so the choice is
+    # made once, visibly, at the entry point.
+    if vp.vert_levels_type == "by_temp":
+        if temp_arr is None:
+            raise ValueError(
+                "vert_params.vert_levels_type='by_temp' requires a temp field, "
+                "but temp=None was passed."
+            )
+        if height_arr is not None:
+            warnings.warn(
+                "vert_params.vert_levels_type='by_temp', so vertical levels are "
+                "assigned from `temp` and the `height` field you supplied is NOT "
+                "used for that purpose. Pass vert_levels_type='by_height' to use "
+                "height instead.",
+                UserWarning, stacklevel=2,
+            )
+            height_arr = None
+    # "by_height" with no height supplied falls through to temp, silently:
+    # passing temp alone is an unambiguous request, not a mistake, and the
+    # default value of vert_levels_type cannot be distinguished from an
+    # explicit one.
 
     clumps = find_clumps_3d(
         conv,
