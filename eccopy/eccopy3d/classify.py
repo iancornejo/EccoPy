@@ -76,7 +76,6 @@ def run(dbz: Union[np.ndarray, list],
         coords_x: Union[np.ndarray, list],
         height: Optional[Union[np.ndarray, list]] = None,
         temp: Optional[Union[np.ndarray, list]] = None,
-        topo: Optional[Union[np.ndarray, list]] = None,
         terrain_ht: Optional[Union[np.ndarray, list]] = None,
         window: Union[WindowSpec, int, float] = WindowSpec((7, 'km')),
         coord_mode: str = "auto",
@@ -260,7 +259,6 @@ def run(dbz: Union[np.ndarray, list],
     # 3. 3D clumping
     height_arr = np.asarray(height, dtype=float) if height is not None else None
     temp_arr = broadcast_temp_field(temp, dbz.shape) if temp is not None else None
-    topo_arr = np.asarray(topo, dtype=float) if topo is not None else None
     terrain_ht_arr = np.asarray(terrain_ht, dtype=float) if terrain_ht is not None else None
 
     clumps = find_clumps_3d(
@@ -270,7 +268,6 @@ def run(dbz: Union[np.ndarray, list],
         min_vol_km3=cp.min_valid_volume_for_convective,
         height_km=height_arr,
         temp=temp_arr,
-        topo_km=topo_arr,
         shallow_threshold_ht=vp.shallow_threshold_ht,
         deep_threshold_ht=vp.deep_threshold_ht,
         shallow_threshold_temp=vp.shallow_threshold_temp,
@@ -295,7 +292,6 @@ def run(dbz: Union[np.ndarray, list],
         deep_threshold_ht=vp.deep_threshold_ht,
         shallow_threshold_temp=vp.shallow_threshold_temp,
         deep_threshold_temp=vp.deep_threshold_temp,
-        topo_km=topo_arr,
         terrain_ht_km=terrain_ht_arr,
         min_ht_agl_for_mid=cp.min_ht_km_agl_for_mid,
         min_ht_agl_for_deep=cp.min_ht_km_agl_for_deep,

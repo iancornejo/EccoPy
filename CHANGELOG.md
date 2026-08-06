@@ -17,6 +17,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Euclidean-disk option is exposed for callers who explicitly want it.
 
 ### Removed
+- **`topo` / `topo_km` from the 3-D path** (`eccopy3d.run()`,
+  `find_clumps_3d()`, `set_echo_type_3d()`). It performed a literal
+  `height_km - topo_km` AGL subtraction with no analog in
+  `ConvStratFinder`, which handles terrain solely via `terrainHt` by
+  *raising the shallow/deep threshold boundaries* — already implemented
+  as `terrain_ht_km`. The 3-D path therefore carried two terrain
+  mechanisms where the reference has one, the extra being an
+  unvalidated carry-over from the 2-D `f_classSub.m` port and unexercised
+  by any validation case. **Breaking:** `eccopy3d.run(..., topo=...)` now
+  raises `TypeError`; use `terrain_ht=` instead. `topo` is unchanged in
+  `eccopy2d_v`, where it is faithful to `f_classSub.m`.
 - **`eccopy.core.fill` / `fill_regions_closest_pixel()`** — a port of
   `f_fillRegionsClosestPixel.m`, which belongs to ECCO-V's *velocity*
   texture path. It had no callers inside EccoPy and no test coverage.
@@ -43,6 +54,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **`min_overlap_for_convective_clumps` now raises `NotImplementedError`
+  for any value other than 1.** The parameter was declared and documented
+  but never read by any code, so a non-default value silently did nothing.
+  EccoPy's `scipy.ndimage.label` clumping reproduces TITAN/LROSE interval
+  clumping only at `min_overlap=1`, where the two are exactly equivalent.
+  The name is retained for TDRP correspondence; validation lives in a new
+  `ClassificationParams.__post_init__`.
 - **`enlarge_mixed`/`enlarge_conv` are no longer limited to pre-exported
   radii.** `_disk()` / `_load_decomp()` generate the strel and closing
   decomposition on demand via `eccopy.core.disk` (using a bundled `.mat`
@@ -139,9 +157,8 @@ utilities.
 ### Known limitations (see README "Validation status" for full detail)
 - `eccopy1d` / `eccopy2d_h`: not yet validated against real reference
   output (only share code paths with validated modules).
-- `eccopy3d`: `min_overlap_for_convective_clumps > 1` and the
-  `topo_km` AGL-subtraction path are unvalidated / unexercised by any
-  real test case.
+- `eccopy3d`: `min_overlap_for_convective_clumps > 1` is unimplemented
+  and rejected at construction time.
 - `stats.n_clumps()` labels connectivity on the *final* `echo_type`
   array and will not numerically match `Result3D.n_clumps` (computed
   earlier, on convectivity, by the dual-threshold clumping algorithm).

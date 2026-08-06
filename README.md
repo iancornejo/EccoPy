@@ -406,20 +406,6 @@ Also fixed along the way:
     input data. Confirmed by re-running against a corrected DBZ field.
 
 **Known unvalidated / lower-confidence areas:**
-  - `min_overlap_for_convective_clumps` > 1 (all 3 cases use the TDRP
-    default of 1, which is exactly equivalent to standard 6-/4-
-    connectivity labeling — see `clumping.py`'s module docstring). A
-    true interval-overlap implementation would be needed for cases using
-    a higher value.
-  - `topo_km`'s literal `height_km - topo_km` AGL-subtraction mechanism
-    (in both `find_clumps_3d()` and `set_echo_type_3d()`) does not appear
-    to exist in the real 3-D C++ path at all — `ConvStratFinder` only has
-    `terrainHt`, which *raises the shallow/deep threshold boundaries*
-    (the already-validated `terrain_ht_km` parameter), and never
-    subtracts anything from the height field itself. `topo_km` was
-    carried over from the 2-D MATLAB `f_classSub.m` port; none of the 3
-    real test cases populate it, so this has not been exercised or
-    validated for the 3-D path.
   - The flood-fill sub-clump growth step (`_grow_regions()` in
     `clumping.py`) is a vectorized simultaneous-direction approximation
     of the C++'s randomized single-cell visit order; ties are broken by
