@@ -438,8 +438,12 @@ each algorithmic stage:
     default `border_value=0` violates the mathematical extensivity of
     closing; fixed with `border_value=1` for standalone erosion.
   - **Disk structuring-element mismatch**: a naive Euclidean
-    approximation over-reaches MATLAB's `strel('disk', r)`; fixed by
-    loading the exact MATLAB-exported neighborhood arrays.
+    approximation over-reaches MATLAB's `strel('disk', r)` (which is an
+    `n=4` periodic-line octagon, not a circle); fixed by reproducing
+    MATLAB's octagon exactly. `eccopy.core.disk` now generates it (and its
+    decomposition) in pure Python for **any** radius, validated bit-exact
+    against the MATLAB-exported arrays — so `enlarge_mixed`/`enlarge_conv`
+    are no longer limited to pre-exported radii.
   - **Morphological closing decomposition**: scipy's monolithic
     dilate-then-erode diverges from MATLAB's per-primitive sequential
     decomposition; fixed via `_sequential_close()` — bit-exact for
@@ -477,8 +481,10 @@ each algorithmic stage:
 requires `height`, `melt`, and `temp` together for sub-classification;
 `VerticalParams` is 3-D-path-only (its threshold fields were removed
 from the 2-D call site); `surf_alt_lim` is correctly sourced from
-`ClassificationParams`; MATLAB-exported `disk_strel`/`disk_decomp` `.mat`
-files are packaged with the library.
+`ClassificationParams`; disk structuring elements are generated in pure
+Python by `eccopy.core.disk` for any radius, with the MATLAB-exported
+`disk_strel`/`disk_decomp` `.mat` files packaged as optional bit-exact
+regression fixtures.
 
 **Known open items:**
   - `class_basic_isotropic()` has not been separately re-validated

@@ -1,7 +1,12 @@
 % export_disk_strels.m
-% Exports exact strel('disk', r).Neighborhood boolean masks to .mat files,
-% for use in EccoPy (Python) as bit-exact replacements for the naive
-% Euclidean-circle _disk(r) approximation.
+% Exports exact strel('disk', r).Neighborhood boolean masks to .mat files.
+%
+% NOTE: These are now OPTIONAL. eccopy.core.disk reproduces MATLAB's
+% strel('disk', r) octagon (and its decomposition) in pure Python for any
+% radius, validated bit-exact against these exports. This script is only
+% needed to (re)generate the ground-truth regression FIXTURES bundled in
+% eccopy/core/data/ -- e.g. to add ground-truth checks at additional
+% radii. It is no longer required in order to USE any enlarge radius.
 %
 % Usage (see run_export_disk_strels.sh):
 %   export RADII="3,5,15,25"

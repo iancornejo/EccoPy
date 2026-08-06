@@ -101,37 +101,38 @@ NOT YET DONE / OPEN ITEMS:
     core/texture.py, since that file was not modified or reviewed here.
 
 ===============================================================================
-PACKAGING REQUIREMENT -- READ BEFORE DEPLOYING
+DISK STRUCTURING ELEMENTS -- GENERATED, NOT EXPORTED
 ===============================================================================
-_disk() and _sequential_close() depend on data files exported directly
-from MATLAB (strel Neighborhood arrays and getsequence() decompositions)
--- they are NOT computed algorithmically in Python. An earlier attempt to
-algorithmically reconstruct MATLAB's disk approximation from documented
-general principles was tried and FAILED a basic sanity check (produced a
-filled square, not a disk) -- do not re-attempt this without a way to
-validate against real MATLAB-exported ground truth.
+_disk() and _sequential_close() get their MATLAB strel('disk', r)
+neighborhoods and getsequence() decompositions from eccopy.core.disk,
+which reproduces MATLAB's default n=4 periodic-line octagon (Adams 1993)
+in pure Python for ANY radius. This is validated bit-exact against the
+MATLAB-exported ground truth (strel radii {3, 5, 15, 25}, decomposition
+radii {15, 25}) bundled under core/data/ -- see tests/test_disk_generator.py.
 
-As of this revision, data-file paths are anchored to this module's own
-location (Path(__file__).parent / "data" / ...), NOT the caller's
-current working directory -- an earlier version used bare relative paths
-("disk_strels", "disk_decomp") which broke with a real FileNotFoundError
-the first time this was run from a notebook whose CWD didn't happen to
-contain those folders. See the comment above _DISK_STREL_DIR /
-_DISK_DECOMP_DIR for exactly where these files are expected relative to
-this file, and adjust if the package's actual data-file layout differs.
+Because the shapes are computed on demand, enlarge_mixed / enlarge_conv
+(and their enlarge*3 / enlarge*5 closing decompositions) are NO LONGER
+limited to a handful of pre-exported radii, and no operation raises
+FileNotFoundError for a "missing" radius. The bundled .mat files are now
+optional: _disk()/_load_decomp() use one as an override when present
+(byte-identical to the generator, so the validated radii are untouched),
+and otherwise generate. They mainly serve as regression fixtures.
 
-Fixing the path resolution does NOT mean the data files are actually
-bundled with the package yet -- that is a separate, still-open step.
-The four disk_strel_r{R}.mat files and the two disk_decomp_r{R}_*.mat
-sets validated this session are being delivered as a standalone zip
-alongside this code change; they still need to be physically placed at
-<package_dir>/core/data/disk_strels/ and <package_dir>/core/data/disk_decomp/
-(or wherever the paths above are adjusted to point), and wired into the
-package's build/install configuration (setup.py package_data /
-MANIFEST.in / pyproject.toml, depending on build backend) so a real
-`pip install` actually ships them -- a plain file-copy into a dev
-checkout is enough to unblock local testing but not enough for
-distribution.
+Historical note: an earlier attempt to build the disk algorithmically was
+recorded as having "produced a filled square, not a disk." That result
+was not actually wrong -- strel('disk', 3) genuinely IS a filled 5x5
+square under MATLAB's n=4 approximation; the mismatch that motivated
+loading exported masks was a naive *Euclidean-circle* _disk(), which has
+a different shape from MATLAB's octagon. eccopy.core.disk reproduces the
+octagon, not the circle (n=0 Euclidean is available there as an explicit
+opt-in for callers who want it).
+
+Data-file paths are anchored to this module's own location
+(Path(__file__).parent / "data" / ...), NOT the caller's current working
+directory. The .mat fixtures are shipped via pyproject.toml
+package-data / MANIFEST.in so the regression test can run against an
+installed copy; losing them no longer breaks classification (it falls
+back to the generator), it only disables the .mat-override path.
 
 Required data files (see export_disk_strels.m / export_disk_decomposition.m
 used during this validation session):
@@ -170,23 +171,22 @@ by row), the SAME enlarge_conv=5 represents a DIFFERENT physical cleanup
 radius at different rows -- 5 gates is a different real distance wherever
 gate spacing differs. This is not a bug and there is nothing to "fix" the
 way the refl_texture_1d row-spacing bug was fixed earlier this session:
-there is no known-correct physical-radius reference to port, no MATLAB
-source suggesting one was intended, and -- separately -- no way to even
-construct the required disk mask at an arbitrary radius in the first
-place (see PACKAGING REQUIREMENT above: _disk() only has masks at 4 fixed
-integer radii, all MATLAB-exported ground truth, none reconstructible
-algorithmically). A genuinely spacing-aware morphological cleanup would
-need a different validated disk shape at every distinct local spacing on
-the grid, which nothing here can produce.
+there is no known-correct physical-radius reference to port, and no MATLAB
+source suggesting one was intended. (Constructing the disk mask at an
+arbitrary radius is no longer a blocker -- eccopy.core.disk generates any
+radius -- but a genuinely spacing-aware cleanup would still need a
+different disk at every distinct local spacing on the grid, which is a
+modelling choice nobody has specified or validated, not a shape-generation
+limitation.)
 
 What IS provided (see resolve_enlarge_radius_px() below): a one-shot,
 UNIFORM-GRID-ONLY convenience that converts a desired physical radius
-(km) into the nearest AVAILABLE pixel radius, given one representative
-spacing value for the whole array (its median, matching the "uniform"
-convention already used elsewhere in EccoPy). This is explicitly not a
-"varying" counterpart the way refl_texture_1d's kernel_mode has one --
-there is no way to offer a spacing-aware version of this, for the reasons
-above, so this function doesn't pretend to.
+(km) into a pixel radius, given one representative spacing value for the
+whole array (its median, matching the "uniform" convention already used
+elsewhere in EccoPy). This is explicitly not a "varying" counterpart the
+way refl_texture_1d's kernel_mode has one -- a spacing-aware version would
+be a modelling decision, not just a shape lookup, so this function doesn't
+pretend to offer one.
 """
 
 from __future__ import annotations
@@ -250,40 +250,45 @@ _decomp_cache = {}
 
 
 def _disk(radius: int) -> np.ndarray:
-    """Exact MATLAB strel('disk', radius).Neighborhood, loaded from
-    exported ground truth. NOT a Euclidean-circle approximation -- see
-    module docstring for why that was tried and rejected."""
+    """Exact MATLAB strel('disk', radius).Neighborhood (the n=4 octagon),
+    for ANY radius. NOT a Euclidean-circle approximation -- see module
+    docstring for why that was tried and rejected.
+
+    Generated in pure Python by eccopy.core.disk (bit-exact to MATLAB and
+    to the previously-exported masks -- see tests/test_disk_generator.py),
+    so operations are no longer limited to pre-exported radii. If an
+    exported .mat happens to be bundled for this radius it is used as-is
+    (identical bytes to the generator), so nothing about the validated
+    radii changes."""
+    from .disk import disk_neighborhood
     r = int(radius)
     if r not in _disk_cache:
-        try:
-            d = loadmat(f"{_DISK_STREL_DIR}/disk_strel_r{r}.mat")
-        except FileNotFoundError as e:
-            raise FileNotFoundError(
-                f"No exported MATLAB disk mask for radius {r}. Run "
-                f"export_disk_strels.m with RADII including {r} and bundle "
-                f"the resulting .mat file at {_DISK_STREL_DIR}/disk_strel_r{r}.mat."
-            ) from e
-        _disk_cache[r] = d["nhood"].astype(bool)
+        mat = Path(f"{_DISK_STREL_DIR}/disk_strel_r{r}.mat")
+        if mat.exists():
+            _disk_cache[r] = loadmat(str(mat))["nhood"].astype(bool)
+        else:
+            _disk_cache[r] = disk_neighborhood(r, n=4)
     return _disk_cache[r]
 
 
 def _load_decomp(radius: int):
-    """MATLAB's real getsequence(strel('disk', radius)) primitives,
-    loaded from exported ground truth."""
+    """MATLAB's real getsequence(strel('disk', radius)) primitives, for
+    ANY radius. Generated in pure Python by eccopy.core.disk (bit-exact
+    to MATLAB and to the previously-exported decompositions -- see
+    tests/test_disk_generator.py). A bundled .mat, if present for this
+    radius, is used as-is (identical to the generator)."""
+    from .disk import disk_decomposition
     r = int(radius)
     if r not in _decomp_cache:
-        try:
-            info = loadmat(f"{_DISK_DECOMP_DIR}/disk_decomp_r{r}_info.mat")
-        except FileNotFoundError as e:
-            raise FileNotFoundError(
-                f"No exported MATLAB disk decomposition for radius {r}. Run "
-                f"export_disk_decomposition.m with RADII including {r} and "
-                f"bundle the resulting .mat files under {_DISK_DECOMP_DIR}/."
-            ) from e
-        n_steps = int(info["n_steps"][0][0])
-        steps = [loadmat(f"{_DISK_DECOMP_DIR}/disk_decomp_r{r}_step{k}.mat")["nhood_k"].astype(bool)
-                 for k in range(1, n_steps + 1)]
-        _decomp_cache[r] = steps
+        info_mat = Path(f"{_DISK_DECOMP_DIR}/disk_decomp_r{r}_info.mat")
+        if info_mat.exists():
+            n_steps = int(loadmat(str(info_mat))["n_steps"][0][0])
+            _decomp_cache[r] = [
+                loadmat(f"{_DISK_DECOMP_DIR}/disk_decomp_r{r}_step{k}.mat")["nhood_k"].astype(bool)
+                for k in range(1, n_steps + 1)
+            ]
+        else:
+            _decomp_cache[r] = disk_decomposition(r, n=4)
     return _decomp_cache[r]
 
 
@@ -298,12 +303,13 @@ def _line_h(length: int) -> np.ndarray:
 
 def available_enlarge_radii_px() -> list:
     """
-    List the pixel radii that have a bundled, MATLAB-exported disk mask
-    (see module docstring "PACKAGING REQUIREMENT") -- the only radii
-    _disk() can produce without exporting new MATLAB data. Queried live
-    from the data directory (not hardcoded) so this can't silently drift
-    out of sync with whatever .mat files actually ship with a given
-    install.
+    List the pixel radii that have a bundled MATLAB-exported disk-mask
+    fixture. NOTE: this is NO LONGER a limit on which radii _disk() can
+    produce -- eccopy.core.disk generates any radius on demand (see module
+    docstring "DISK STRUCTURING ELEMENTS"). This function now just reports
+    which radii have exact-ground-truth .mat fixtures bundled (useful for
+    tests / provenance), queried live from the data directory so it can't
+    drift out of sync with whatever .mat files ship with a given install.
 
     Returns
     -------
@@ -326,27 +332,17 @@ def resolve_enlarge_radius_px(target_km: float,
                               representative_spacing_km: float,
                               param_name: str = "enlarge radius") -> int:
     """
-    Convert a target PHYSICAL enlarge radius (km) into the nearest pixel
-    radius that has a bundled, validated MATLAB disk mask -- a one-shot,
-    UNIFORM-GRID-ONLY convenience. See module docstring "PIXEL COUNTS,
-    NOT PHYSICAL UNITS" for why this does NOT have, and cannot have, a
+    Convert a target PHYSICAL enlarge radius (km) into a pixel radius --
+    a one-shot, UNIFORM-GRID-ONLY convenience. See module docstring
+    "PIXEL COUNTS, NOT PHYSICAL UNITS" for why this does NOT have a
     genuinely spacing-aware ("varying", in refl_texture_1d's kernel_mode
-    sense) counterpart: class_basic()'s structuring elements are fixed
-    MATLAB-exported pixel masks at only 4 discrete radii, not something
-    resolvable at an arbitrary point-by-point physical size the way a
-    sliding texture window is.
+    sense) counterpart: that would be a modelling decision, not a shape
+    lookup.
 
-    This function only answers "which bundled pixel radius is closest to
-    my target physical radius, given ONE representative spacing value for
-    the whole array" -- it does NOT check whether the resulting pixel
-    radius, or its enlarge_mixed*3 / enlarge_conv*5 derived closing
-    radius, actually has bundled DECOMPOSITION data too (see module
-    docstring: enlarge_mixed is only fully usable at 5; enlarge_conv at 3
-    or 5). class_basic() / class_basic_isotropic() will still raise their
-    own clear FileNotFoundError downstream if you pick a radius whose
-    decomposition wasn't exported -- this function can't and doesn't
-    pre-empt that, since it only knows about disk_strels, not
-    disk_decomp.
+    Since eccopy.core.disk generates the structuring element at any
+    radius, this now resolves to the EXACT rounded pixel radius --
+    round(target_km / representative_spacing_km) -- rather than snapping
+    to a small set of pre-exported masks. No approximation, no warning.
 
     Parameters
     ----------
@@ -362,53 +358,25 @@ def resolve_enlarge_radius_px(target_km: float,
         value -- the same caveat class_basic()'s pixel-based radii always
         carried, just made explicit here instead of silent.
     param_name : str
-        Only used to make the warning message readable (e.g. pass
-        "enlarge_mixed" or "enlarge_conv").
+        Reserved for readable messages; unused now that no warning fires.
 
     Returns
     -------
     int
-        The bundled pixel radius closest to
-        target_km / representative_spacing_km.
+        round(target_km / representative_spacing_km), clamped to a minimum
+        of 1.
 
     Raises
     ------
     ValueError
         If representative_spacing_km is not a positive, finite number.
-    FileNotFoundError
-        If no disk masks are bundled at all (see available_enlarge_radii_px()).
     """
     if not np.isfinite(representative_spacing_km) or representative_spacing_km <= 0:
         raise ValueError(
             f"representative_spacing_km must be a positive, finite number; "
             f"got {representative_spacing_km!r}."
         )
-    available = available_enlarge_radii_px()
-    if not available:
-        raise FileNotFoundError(
-            f"No bundled MATLAB disk masks found under {_DISK_STREL_DIR}/ -- "
-            f"cannot resolve any enlarge radius. See module docstring "
-            f"'PACKAGING REQUIREMENT'."
-        )
-
-    target_px = target_km / representative_spacing_km
-    best = min(available, key=lambda r: abs(r - target_px))
-    achieved_km = best * representative_spacing_km
-
-    rel_err = abs(achieved_km - target_km) / target_km if target_km != 0 else np.inf
-    if rel_err > 0.25:
-        warnings.warn(
-            f"{param_name}: requested {target_km:.3g} km resolves to the "
-            f"nearest AVAILABLE pixel radius {best} px ({achieved_km:.3g} km "
-            f"at this grid's representative spacing of "
-            f"{representative_spacing_km:.4g} km/px) -- a "
-            f"{rel_err:.0%} difference from what was requested, since only "
-            f"{available} px are bundled (see module docstring 'PACKAGING "
-            f"REQUIREMENT' to export additional MATLAB disk masks for a "
-            f"closer match).",
-            stacklevel=2,
-        )
-    return best
+    return max(1, int(round(target_km / representative_spacing_km)))
 
 
 def _edge_pad_close(arr: np.ndarray, se: np.ndarray) -> np.ndarray:
@@ -481,12 +449,12 @@ def class_basic_isotropic(conv: np.ndarray,
          -- scipy's single global-border_value closing is a real,
          boundary-proximate divergence from true decomposed closing for
          ANY large structuring element, not a MATLAB-specific quirk (see
-         _edge_pad_close()'s docstring). This reuses the SAME bundled
-         decomposition data files as class_basic() (radius = enlarge*3 /
-         enlarge*5), which only cover {15, 25} -- i.e. this still
-         requires enlarge_mixed/enlarge_conv at their validated default
-         of 5; other values will raise FileNotFoundError exactly as
-         class_basic() does, see module docstring "PACKAGING REQUIREMENT".
+         _edge_pad_close()'s docstring). This uses the SAME disk
+         decomposition as class_basic() (radius = enlarge*3 / enlarge*5),
+         generated by eccopy.core.disk for any radius (bit-exact to the
+         bundled {15, 25} fixtures) -- so any enlarge_mixed/enlarge_conv
+         works, not just the validated default of 5; see module docstring
+         "DISK STRUCTURING ELEMENTS".
     What is NOT fixed/known: whether the disk-enlarge-close-fill-erode
     STRUCTURE itself (as opposed to the mechanics of any one closing
     step) is the right algorithm for horizontal composite data at all --
@@ -598,8 +566,10 @@ def class_basic(conv: np.ndarray,
         debugging" standard) -- they just don't happen to move the needle
         on this one case's final numbers. ***
     enlarge_mixed, enlarge_conv : int
-        Structuring element radii. Must have corresponding exported
-        MATLAB data files bundled -- see module docstring.
+        Structuring element radii (pixels). Any radius works -- the disk
+        strel and its closing decomposition are generated by
+        eccopy.core.disk (bit-exact to MATLAB); see module docstring
+        "DISK STRUCTURING ELEMENTS".
 
     Returns
     -------

@@ -1,7 +1,8 @@
 #!/bin/bash
-# Exports exact MATLAB strel('disk', r) masks for the radii EccoPy uses,
-# so the Python port can load bit-exact structuring elements instead of
-# the approximate Euclidean-circle _disk(r).
+# Exports exact MATLAB strel('disk', r) masks. OPTIONAL: eccopy.core.disk
+# now generates these shapes in pure Python for any radius (bit-exact to
+# these exports). Use this only to (re)generate the ground-truth
+# regression fixtures under eccopy/core/data/, not to enable a radius.
 #
 # Usage:
 #   ./run_export_disk_strels.sh
