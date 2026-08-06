@@ -6,6 +6,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Sample datasets** under `notebooks/data/` (4.5 MB total), one per
+  module, with `make_sample_data.py` documenting provenance and subset
+  selection and a `README.md` carrying attribution. Committed to the
+  repository but excluded from the built wheel and sdist.
 - **`eccopy.__version__`**, single-sourced from `eccopy/__init__.py`.
   `pyproject.toml` now declares `dynamic = ["version"]` and reads the
   attribute, so the version is defined in exactly one place.
