@@ -238,3 +238,46 @@ def test_return_intermediates_without_levels_stays_none():
                      window=WindowSpec((5, "km")), return_intermediates=True)
     assert r.fitted_dbz is None
     assert r.intermediate_levels is None
+
+
+# ---------------------------------------------------------------------
+# Parameter validation and terrain handling
+# ---------------------------------------------------------------------
+
+def test_min_overlap_other_than_one_raises():
+    """
+    Only min_overlap=1 is implemented (where interval clumping and
+    6-/4-connectivity coincide). Any other value must fail loudly rather
+    than silently returning connectivity-based results.
+    """
+    ClassificationParams(min_overlap_for_convective_clumps=1)  # default: fine
+
+    for bad in (0, 2, 3):
+        with pytest.raises(NotImplementedError, match="min_overlap"):
+            ClassificationParams(min_overlap_for_convective_clumps=bad)
+
+
+def test_run_rejects_removed_topo_argument():
+    """
+    `topo` performed a literal height-topo AGL subtraction with no analog
+    in ConvStratFinder, and is removed. Terrain is handled by
+    `terrain_ht` (ConvStratFinder's `terrainHt`), which raises the
+    shallow/deep threshold boundaries instead.
+    """
+    dbz, z, y, x = _synthetic_volume()
+    with pytest.raises(TypeError, match="topo"):
+        eccopy3d.run(dbz, coords_z=z, coords_y=y, coords_x=x, topo=np.zeros_like(dbz[0]))
+
+
+def test_terrain_ht_still_raises_thresholds():
+    """`terrain_ht` survives topo removal and still shifts sub-typing."""
+    dbz, z, y, x = _synthetic_volume()
+    height = np.broadcast_to(z[:, None, None], dbz.shape).copy()
+
+    flat = eccopy3d.run(dbz, coords_z=z, coords_y=y, coords_x=x, height=height)
+    elevated = eccopy3d.run(dbz, coords_z=z, coords_y=y, coords_x=x, height=height,
+                            terrain_ht=np.full(dbz.shape[1:], 3.0))
+
+    assert flat.echo_type.shape == elevated.echo_type.shape
+    # Raising the terrain floor must not silently produce an empty field.
+    assert np.any(np.isin(elevated.echo_type, [14, 16, 18, 25, 32, 34, 36, 38]))

@@ -1040,7 +1040,6 @@ def set_echo_type_3d(convectivity: np.ndarray,
                      deep_threshold_ht: float = 9.0,
                      shallow_threshold_temp: float = 0.0,
                      deep_threshold_temp: float = -12.0,
-                     topo_km: Optional[np.ndarray] = None,
                      terrain_ht_km: Optional[np.ndarray] = None,
                      min_ht_agl_for_mid: float = 2.0,
                      min_ht_agl_for_deep: float = 4.0,
@@ -1086,12 +1085,11 @@ def set_echo_type_3d(convectivity: np.ndarray,
     convectivity : np.ndarray, shape (nz, ny, nx)
     clumps : list of dicts (see find_clumps_3d / _clump_category)
     height_km : np.ndarray, shape (nz, ny, nx), optional
-        Height field, km MSL (or AGL — see `topo_km`).
+        Height field, km MSL.
     temp : np.ndarray, shape (nz, ny, nx), optional
         Temperature field, °C.
     shallow_threshold_ht, deep_threshold_ht : float, km
     shallow_threshold_temp, deep_threshold_temp : float, °C
-    topo_km : np.ndarray, shape (ny, nx), optional
     terrain_ht_km : np.ndarray, shape (ny, nx), optional
     min_ht_agl_for_mid, min_ht_agl_for_deep : float, km
     max_conv_for_strat, min_conv_for_conv, min_vol_km3,
@@ -1111,9 +1109,6 @@ def set_echo_type_3d(convectivity: np.ndarray,
 
     if use_height:
         height_km = np.asarray(height_km, dtype=float)
-        if topo_km is not None:
-            topo_km = np.asarray(topo_km, dtype=float)
-            height_km = height_km - topo_km[np.newaxis, :, :]
         shallow_bnd = np.full((ny, nx), shallow_threshold_ht)
         deep_bnd = np.full((ny, nx), deep_threshold_ht)
         if terrain_ht_km is not None:

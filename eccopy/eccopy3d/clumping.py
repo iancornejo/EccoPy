@@ -94,22 +94,18 @@ overlap between adjacent rows/planes to connect). All three validation
 cases (SPOL, WRF, SEA) use the TDRP default of 1, which is exactly
 equivalent to standard 6-connectivity (3-D) / 4-connectivity (2-D)
 labeling -- so scipy.ndimage.label is a safe stand-in here. If a future
-case sets min_overlap_for_convective_clumps > 1, this module will need a
-true interval-overlap implementation; it will silently give 6-/4-
-connectivity behaviour instead, which is a real (currently unvalidated)
-gap.
+Supporting a higher value requires a true interval-overlap
+implementation. Until that exists, ClassificationParams rejects any value
+other than 1 (NotImplementedError) rather than silently returning
+connectivity-based results.
 
 ARRAY CONVENTION: (Z, Y, X), matching EccoPy-3D's data-agnostic shape
 contract (see eccopy3d.classify.run()).
 
-TOPO/AGL SUPPORT: `topo_km` here performs a literal height_km - topo_km
-AGL subtraction. NOTE: this mechanism does NOT appear to exist in the
-real 3-D C++ path (ConvStratFinder only has `terrainHt`, which RAISES the
-shallow/deep threshold BOUNDARIES -- see set_echo_type_3d's `terrain_ht_km`
--- it never subtracts anything from the height field itself). `topo_km`
-was carried over from the 2-D MATLAB f_classSub.m port and is UNVALIDATED
-for the 3-D path; none of the 3 real test cases populate it, so it hasn't
-mattered yet. Flagging for awareness, not fixing now.
+TERRAIN: terrain handling lives in set_echo_type_3d() as `terrain_ht_km`,
+which raises the shallow/deep threshold boundaries over elevated terrain,
+matching ConvStratFinder's `terrainHt`. The height field itself is never
+modified here.
 
 PERFORMANCE: per-clump work is restricted to each clump's tight bounding
 box via scipy.ndimage.find_objects(), as before -- cost scales with total
@@ -135,7 +131,6 @@ def find_clumps_3d(convectivity: np.ndarray,
                    min_vol_km3: float,
                    height_km: Optional[np.ndarray] = None,
                    temp: Optional[np.ndarray] = None,
-                   topo_km: Optional[np.ndarray] = None,
                    shallow_threshold_ht: float = 4.5,
                    deep_threshold_ht: float = 9.0,
                    shallow_threshold_temp: float = 0.0,
@@ -164,7 +159,7 @@ def find_clumps_3d(convectivity: np.ndarray,
     min_vol_km3 : float
         Volume filter, applied BOTH before splitting (stage 1) and after
         (stage 3) -- see module docstring.
-    height_km, temp, topo_km : see previous version; unchanged semantics.
+    height_km, temp : see previous version; unchanged semantics.
     shallow_threshold_ht, deep_threshold_ht : float, km
     shallow_threshold_temp, deep_threshold_temp : float, °C
     use_dual_thresholds : bool
@@ -208,9 +203,6 @@ def find_clumps_3d(convectivity: np.ndarray,
     use_temp = (not use_height) and (temp is not None)
     if use_height:
         height_km = np.asarray(height_km, dtype=float)
-        if topo_km is not None:
-            topo_km = np.asarray(topo_km, dtype=float)
-            height_km = height_km - topo_km[np.newaxis, :, :]
     elif use_temp:
         temp = np.asarray(temp, dtype=float)
 

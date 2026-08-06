@@ -86,6 +86,11 @@ class ClassificationParams:
     each_subclump_min_area_frac     : float  Default: 0.02
     each_subclump_min_area_km2      : float  Default: 2.0
     min_overlap_for_convective_clumps : int  Default: 1
+        TITAN/LROSE interval-clumping overlap requirement. Only the
+        default of 1 is implemented, where interval clumping is exactly
+        equivalent to 6-connectivity (3-D) / 4-connectivity (2-D)
+        labeling. Any other value raises NotImplementedError rather
+        than silently returning connectivity-based results.
 
     3-D sub-type thresholds (from ConvStratFinder constructor)
     ----------------------------------------------------------
@@ -126,7 +131,7 @@ class ClassificationParams:
     all_subclumps_min_area_frac:      float = 0.33
     each_subclump_min_area_frac:      float = 0.02
     each_subclump_min_area_km2:       float = 2.0
-    min_overlap_for_convective_clumps: int  = 1      # new
+    min_overlap_for_convective_clumps: int  = 1
 
     # Sub-type classification
     min_conv_fraction_for_deep:             float = 0.05   # was 0.1  — FIXED
@@ -134,3 +139,17 @@ class ClassificationParams:
     max_shallow_conv_fraction_for_elevated: float = 0.05   # was 0.1  — FIXED
     max_deep_conv_fraction_for_elevated:    float = 0.25   # was 0.1  — FIXED
     min_strat_fraction_for_strat_below:     float = 0.9    # was 0.5  — FIXED
+
+    def __post_init__(self):
+        """Reject parameter values whose behaviour is not implemented."""
+        if self.min_overlap_for_convective_clumps != 1:
+            raise NotImplementedError(
+                "min_overlap_for_convective_clumps="
+                f"{self.min_overlap_for_convective_clumps} is not implemented. "
+                "EccoPy's clumping uses scipy.ndimage.label, which reproduces "
+                "TITAN/LROSE interval clumping only at min_overlap=1 (where the "
+                "two are exactly equivalent). Supporting a higher value requires "
+                "a true interval-overlap implementation; until that exists and "
+                "is validated against reference output, this raises rather than "
+                "silently returning 6-/4-connectivity results."
+            )
