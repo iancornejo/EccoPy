@@ -16,10 +16,28 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ground truth (`tests/test_disk_generator.py`, 84 cases). An `n=0`
   Euclidean-disk option is exposed for callers who explicitly want it.
 
+### Removed
+- **`eccopy.core.fill` / `fill_regions_closest_pixel()`** — a port of
+  `f_fillRegionsClosestPixel.m`, which belongs to ECCO-V's *velocity*
+  texture path. It had no callers inside EccoPy and no test coverage.
+- **`vel_cmap()` / `_VEL_COLORS`** (`eccopy.core.colormaps`) — HCR
+  velocity colormap (port of `velCols.m`), unused by any EccoPy
+  classification or plotting path.
+- **`scikit-learn` runtime dependency**, which existed solely to supply
+  `KDTree` to `fill_regions_closest_pixel()`.
+- Duplicate `strel('disk', r)` fixtures under `examples/disk_strels/`
+  (byte-identical to the copies under `eccopy/core/data/disk_strels/`,
+  plus a `disk.zip` holding a third copy). The MATLAB export scripts are
+  retained as the provenance record and now default to writing into
+  `eccopy/core/data/disk_strels/`.
+
 ### Fixed
 - `pyproject.toml` `Repository` URL and the `CHANGELOG` release link
   pointed at upstream/placeholder repositories rather than EccoPy's own.
 - `CONTRIBUTING.md` quoted a stale test count.
+- `.gitignore` did not cover `build/`, `dist/`, `*.egg-info/`,
+  `.pytest_cache/` or coverage output, so a local `python -m build` or
+  `pytest --cov` left artefacts staged for commit.
 - `build` added to the `dev` extra: `test_packaging.py` `importorskip`s
   it, so a documented dev install previously skipped the wheel-build
   check and reported a lower test count than a full run.
