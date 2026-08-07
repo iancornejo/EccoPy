@@ -1,5 +1,7 @@
 # EccoPy
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21840860.svg)](https://doi.org/10.5281/zenodo.21840860)
+
 Data-agnostic Python implementation of **ECCO** (Echo Classification from
 COnvectivity), which separates convective from stratiform radar echo.
 
@@ -343,9 +345,18 @@ pytest eccopy/tests/
 
 ## Citing EccoPy
 
-`CITATION.cff` in the repository root carries the software citation;
-GitHub renders it as a "Cite this repository" button. Please cite the two
-algorithm papers above alongside it.
+Archived on Zenodo. Cite the concept DOI, which always resolves to the
+latest release:
+
+> [10.5281/zenodo.21840860](https://doi.org/10.5281/zenodo.21840860)
+
+For exact reproducibility, cite the DOI of the specific version you used
+instead - v1.0.0 is [10.5281/zenodo.21840861](https://doi.org/10.5281/zenodo.21840861).
+
+`CITATION.cff` in the repository root carries the full software citation,
+which GitHub renders as a "Cite this repository" button. Please cite the
+two algorithm papers above alongside it: EccoPy is an implementation, and
+the method is theirs.
 
 ## Acknowledgements
 
