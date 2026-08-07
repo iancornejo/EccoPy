@@ -52,6 +52,26 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ground truth (`tests/test_disk_generator.py`, 84 cases). An `n=0`
   Euclidean-disk option is exposed for callers who explicitly want it.
 
+- **Redundant and unimplemented parameter fields**, found in a
+  pre-release audit of every file:
+  - `TextureParams.window_1d`, `TextureParams.texture_radius` and
+    `TextureParams.upper_lim_dbz` - the first two superseded by the
+    `window` argument every `run()` takes, the third having no
+    ConvStratFinder counterpart and being superseded by
+    `texture_limit_high`.
+  - `ClassificationParams.strat_mixed` and `.mixed_conv`, which shadowed
+    `max_convectivity_for_stratiform` and
+    `min_convectivity_for_convective` with identical defaults while being
+    read by nothing.
+  - `texture_to_convectivity_piecewise()`, uncalled and made fully
+    redundant by `texture_to_convectivity_linear()`'s new `lower_lim`.
+    The coverage condition it additionally applied is already applied
+    upstream by `refl_texture_2d()`.
+  - `col_max_convectivity()` in `eccopy3d.clumping`, uncalled and
+    unexported.
+  - The unused `param_name` argument of `resolve_enlarge_radius_px()`,
+    plus five unused imports.
+
 ### Removed
 - **`VerticalParams.min_valid_dbz`.** It was read by no code and shadowed
   `TextureParams.min_valid_dbz`, which is the live parameter the 3-D path
@@ -149,6 +169,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **`texture_limit_low`, `use_dbz_col_max` and `dbz_for_echo_tops` are now
+  implemented.** All three were declared and documented but read by no
+  code. `texture_limit_low` scales convectivity across
+  `[low, high]` and makes sub-low texture missing rather than zero, per
+  `ConvStratFinder::_computeConvectivity()`. `use_dbz_col_max` computes
+  texture once from the column-maximum reflectivity and copies it to every
+  level. `dbz_for_echo_tops` populates a new `Result3D.echo_top_km` field -
+  an echo top derived from reflectivity, distinct from
+  `stats.echo_top_height()`, which works from the classification. Each is
+  inert at its default, and output with default parameters is
+  byte-identical to the previous release in all four modules.
 - **README rewritten** for v1.0: 693 lines to 351. Adds full citations for
   both algorithm papers, a Mermaid diagram of the texture ->
   convectivity -> classification chain, a per-module parameter matrix with

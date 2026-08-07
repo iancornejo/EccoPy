@@ -62,6 +62,11 @@ class Result3D:
     # plotting the window footprint (see core.colormaps.draw_window_ring()).
     # None only for a bare-pixel window on a unit-agnostic grid.
     texture_radius:  Optional[float] = None
+    # Highest height at which reflectivity reaches tp.dbz_for_echo_tops,
+    # per column - ConvStratFinder's echo-top product. Computed from
+    # reflectivity, unlike stats.echo_top_height() which works from the
+    # classification. Requires `height`; None otherwise.
+    echo_top_km:     Optional[np.ndarray] = None   # shape (Y, X)
     # Populated ONLY when run(..., return_intermediates=True, levels=[...])
     # is passed; None otherwise (default, zero extra cost). Computed via
     # a slow, plain-Python per-point loop (core.debug.refl_texture_2d_
@@ -256,24 +261,58 @@ def run(dbz: Union[np.ndarray, list],
         if outside.any():
             dbz = np.where(outside, np.nan, dbz)
 
+    # Echo top: highest level at which reflectivity reaches
+    # dbz_for_echo_tops, matching the topKm loop in
+    # ConvStratFinder::_computeDbzColMax(). Needs a height field.
+    echo_top_km = None
+    if height is not None:
+        height_3d = np.broadcast_to(np.asarray(height, dtype=float), dbz.shape)
+        reaches = np.isfinite(dbz) & (dbz >= tp.dbz_for_echo_tops)
+        # -inf rather than NaN as the fill, so columns with no qualifying
+        # echo do not trigger numpy's all-NaN-slice warning.
+        top = np.where(reaches, height_3d, -np.inf).max(axis=0)
+        echo_top_km = np.where(reaches.any(axis=0), top, np.nan)
+
     # 1. 2D radial texture per level
-    texture, fraction_active = refl_texture_2d(
-        dbz,
-        texture_radius=radius_km,
-        dy=sp_y_2d,
-        dx=sp_x_2d,
-        base_dbz=tp.dbz_base,
-        min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
-        min_frac_texture=tp.min_frac_texture,
-        min_frac_fit=tp.min_frac_fit,
-        n_threads=n_threads,
-        kernel_mode=kernel_mode,
-    )
+    if tp.use_dbz_col_max:
+        # Compute texture once from the column-maximum reflectivity and copy
+        # it to every level that has echo - ConvStratFinder's _useDbzColMax
+        # branch. Cheaper than a per-level texture, and appropriate when the
+        # classification is meant to be columnar.
+        col_max = np.where(np.isfinite(dbz).any(axis=0),
+                           np.nanmax(dbz, axis=0), np.nan)
+        texture_2d, fraction_active = refl_texture_2d(
+            col_max[np.newaxis, :, :],
+            texture_radius=radius_km,
+            dy=sp_y_2d,
+            dx=sp_x_2d,
+            base_dbz=tp.dbz_base,
+            min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
+            min_frac_texture=tp.min_frac_texture,
+            min_frac_fit=tp.min_frac_fit,
+            n_threads=n_threads,
+            kernel_mode=kernel_mode,
+        )
+        texture = np.where(np.isfinite(dbz), texture_2d[0][np.newaxis, :, :], np.nan)
+    else:
+        texture, fraction_active = refl_texture_2d(
+            dbz,
+            texture_radius=radius_km,
+            dy=sp_y_2d,
+            dx=sp_x_2d,
+            base_dbz=tp.dbz_base,
+            min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
+            min_frac_texture=tp.min_frac_texture,
+            min_frac_fit=tp.min_frac_fit,
+            n_threads=n_threads,
+            kernel_mode=kernel_mode,
+        )
 
     # 2. Convectivity
     conv = texture_to_convectivity_linear(
         texture,
         upper_lim=tp.texture_limit_high,
+        lower_lim=tp.texture_limit_low,
     )
 
     # 3. 3D clumping
@@ -375,6 +414,7 @@ def run(dbz: Union[np.ndarray, list],
         fraction_active=fraction_active,
         n_clumps=len(clumps),
         texture_radius=radius_km,
+        echo_top_km=echo_top_km,
         fitted_dbz=fitted_dbz,
         detrended_dbz=detrended_dbz,
         intermediate_levels=intermediate_levels,

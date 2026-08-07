@@ -15,7 +15,6 @@ Two properties are pinned here:
 """
 
 import numpy as np
-import pytest
 
 from eccopy.core.classification import class_basic
 

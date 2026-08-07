@@ -20,7 +20,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ..params.window import WindowSpec
-from .texture import _fillmissing_linear, _radius_field_along_axis, refl_texture_2d
+from .texture import _fillmissing_linear, _radius_field_along_axis
 
 
 @dataclass

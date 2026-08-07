@@ -1,5 +1,5 @@
 from .texture import refl_texture_1d, refl_texture_2d
-from .convectivity import texture_to_convectivity_linear, texture_to_convectivity_piecewise
+from .convectivity import texture_to_convectivity_linear
 from .classification import (class_basic, class_basic_isotropic, class_sub_2d,
                               set_echo_type_3d,
                               CATEGORY_MISSING, CATEGORY_STRATIFORM_LOW,
@@ -38,8 +38,7 @@ def __getattr__(name):
 
 __all__ = [
     "refl_texture_1d", "refl_texture_2d",
-    "texture_to_convectivity_linear", "texture_to_convectivity_piecewise",
-    "class_basic", "class_basic_isotropic", "class_sub_2d", "set_echo_type_3d",
+    "texture_to_convectivity_linear",     "class_basic", "class_basic_isotropic", "class_sub_2d", "set_echo_type_3d",
     "CATEGORY_MISSING", "CATEGORY_STRATIFORM_LOW", "CATEGORY_STRATIFORM_MID",
     "CATEGORY_STRATIFORM_HIGH", "CATEGORY_MIXED",
     "CATEGORY_CONVECTIVE_ELEVATED", "CATEGORY_CONVECTIVE_SHALLOW",

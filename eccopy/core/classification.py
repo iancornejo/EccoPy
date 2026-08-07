@@ -80,14 +80,13 @@ source specifies.
 """
 
 from __future__ import annotations
-import warnings
 from pathlib import Path
 from typing import Optional, Tuple
 import numpy as np
 from scipy.io import loadmat
 from scipy.ndimage import (
     label, binary_dilation, binary_erosion,
-    binary_closing, binary_fill_holes,
+    binary_fill_holes,
 )
 
 # Integer echo-type codes
@@ -211,8 +210,7 @@ def available_enlarge_radii_px() -> list:
 
 
 def resolve_enlarge_radius_px(target_km: float,
-                              representative_spacing_km: float,
-                              param_name: str = "enlarge radius") -> int:
+                              representative_spacing_km: float) -> int:
     """
     Convert a target PHYSICAL enlarge radius (km) into a pixel radius --
     a one-shot, UNIFORM-GRID-ONLY convenience. See module docstring
@@ -239,9 +237,6 @@ def resolve_enlarge_radius_px(target_km: float,
         points whose true local spacing differs from this representative
         value -- the same caveat class_basic()'s pixel-based radii always
         carried, just made explicit here instead of silent.
-    param_name : str
-        Reserved for readable messages; unused now that no warning fires.
-
     Returns
     -------
     int

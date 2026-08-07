@@ -172,6 +172,15 @@ read each parameter.
 | `min_valid_dbz` | `None` | X | X | X | X |
 | `min_frac_texture` | `0.25` | | | X | X |
 | `min_frac_fit` | `0.67` | | | X | X |
+| `texture_limit_low` | `0.0` | X | X | X | X |
+| `use_dbz_col_max` | `False` | | | | X |
+| `dbz_for_echo_tops` | `18.0` | | | | X |
+
+Convectivity is scaled across `[texture_limit_low, texture_limit_high]`;
+texture below the low limit gives missing convectivity rather than zero.
+`use_dbz_col_max` computes texture once from column-maximum reflectivity
+and copies it to every level. `dbz_for_echo_tops` sets the reflectivity
+threshold defining `Result3D.echo_top_km`.
 
 `min_valid_dbz` nulls reflectivity below the threshold before texture is
 computed. `None` means "use this module's reference default": `0.0` for
