@@ -6,6 +6,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`eccopy/tests/test_notebooks.py`** — structural checks on the committed
+  notebooks: no error outputs, well-formed markdown tables, no cell that
+  calls `print()`/`plt.show()` without output, and one notebook per module.
+  These catch rendering faults that are otherwise invisible until someone
+  opens the file on GitHub. Skipped when `notebooks/` is absent.
 - **`notebooks/eccopy1d_workflow.ipynb`** — full walkthrough of the 1-D
   pipeline on the bundled disdrometer record: deriving reflectivity from a
   drop-size distribution, unit-typed time windows, wind-advected distance
@@ -88,6 +93,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `eccopy/core/data/disk_strels/`.
 
 ### Fixed
+- **A malformed row in the 3-D notebook's sub-typing table.** One row was
+  missing its Mechanism cell, and GitHub-flavoured markdown rejects an
+  entire table when any row's column count differs from the header -- so
+  the whole block rendered as a run-on paragraph on GitHub while the two
+  tables above it in the same cell rendered normally.
+- **The 1-D notebook's echo-type strip rendered as an empty axis.** A
+  single-row `pcolormesh` gives matplotlib no way to infer cell height;
+  replaced with `imshow` and an explicit extent.
 - **`draw_window_ring()` drew a wildly oversized footprint on
   latitude/longitude panels.** It placed a circle of radius `radius_km`
   directly in axis units, so a 7 km window on a degree-based axis was drawn
