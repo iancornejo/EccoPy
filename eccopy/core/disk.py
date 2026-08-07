@@ -16,21 +16,12 @@ Euclidean disk. It returns an OCTAGON built by dilating a single point
 with four periodic-line structuring elements (0°, 45°, 90°, 135°) plus
 two unit correction lines - the radial decomposition of Rolf Adams,
 *Radial Decomposition of Discs and Spheres* (CVGIP: GMIP, 1993). EccoPy
-previously loaded the resulting ``.Neighborhood`` arrays from
-MATLAB-exported .mat files, which pinned every disk-based operation
-(``enlarge_mixed`` / ``enlarge_conv`` morphology and the ``imclose``
-decompositions they trigger at radius ``enlarge×3`` / ``enlarge×5``) to
-the handful of radii someone had remembered to export - e.g.
-``enlarge_conv=15`` failed because nobody had exported the radius-75
-decomposition. This module removes that limitation while preserving the
-exact MATLAB shape, so the classification path stays faithful to every
-already-validated 2D-V / 3D case.
+generates these in pure Python, so disk-based operations are not
+restricted to any pre-exported set of radii.
 
-This is NOT a divergence from MATLAB: the geometry below reproduces
-MATLAB's ``n = 4`` algorithm exactly (proven bit-exact at every exported
-radius). The only thing that changes is *where* the arrays come from
-(computed on demand vs. pre-exported), which is why it does not require
-the five-step deliberate-divergence bar in CONTRIBUTING.md.
+The geometry below reproduces MATLAB's ``n = 4`` algorithm exactly, so
+this is not a divergence: only the source of the arrays changes, from
+pre-exported files to on-demand computation.
 
 Geometry (n = 4), for r >= 3
 ----------------------------
@@ -144,8 +135,8 @@ def disk_neighborhood(r: int, n: int = 4) -> np.ndarray:
     """
     MATLAB ``strel('disk', r, n).Neighborhood`` as a boolean array.
 
-    ``n = 4`` (default) returns the periodic-line octagon - bit-exact to
-    MATLAB and to EccoPy's previously-exported masks. ``n = 0`` returns
+    ``n = 4`` (default) returns the periodic-line octagon, bit-exact to
+    MATLAB. ``n = 0`` returns
     the true Euclidean disk (``x^2 + y^2 <= r^2``), a ``(2r+1)`` array,
     for callers who explicitly want the un-approximated shape.
     """
