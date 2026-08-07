@@ -15,7 +15,7 @@ from eccopy.core.temperature import isotherm_height, broadcast_temp_field
 
 
 # ---------------------------------------------------------------------------
-# isotherm_height — shape convention
+# isotherm_height - shape convention
 # ---------------------------------------------------------------------------
 
 def test_isotherm_height_shape_is_z_y_x_in_y_x_out():
@@ -62,7 +62,7 @@ def test_isotherm_height_preserves_horizontal_variation():
 
 
 # ---------------------------------------------------------------------------
-# isotherm_height — fallback behaviour (target outside the profile's range)
+# isotherm_height - fallback behaviour (target outside the profile's range)
 # ---------------------------------------------------------------------------
 
 def test_isotherm_height_target_warmer_than_whole_column_returns_bottom():
@@ -94,7 +94,7 @@ def test_isotherm_height_all_nan_column_returns_nan():
 
 
 # ---------------------------------------------------------------------------
-# isotherm_height — NaN-gap crossing search
+# isotherm_height - NaN-gap crossing search
 # ---------------------------------------------------------------------------
 
 def test_isotherm_height_finds_crossing_across_single_nan_gap():

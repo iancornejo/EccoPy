@@ -1,6 +1,6 @@
 """Tests for eccopy.core.classification.filter_short_convective_runs_1d()
 in isolation from the rest of the eccopy1d pipeline (no texture/class_basic
-involved) — see test_eccopy1d.py for the end-to-end version."""
+involved) - see test_eccopy1d.py for the end-to-end version."""
 import pytest
 
 import numpy as np

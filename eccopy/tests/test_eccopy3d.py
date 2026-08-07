@@ -1,4 +1,4 @@
-"""Tests for eccopy3d.run() — array-based 3-D classification."""
+"""Tests for eccopy3d.run() - array-based 3-D classification."""
 
 import numpy as np
 import pytest

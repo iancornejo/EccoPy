@@ -1,48 +1,27 @@
 """
 3-D clumping for EccoPy-3D.
 
-*** REWRITE (this session) — real two-stage dual-threshold algorithm ***
-*** VALIDATED against real LROSE-ECCO truth across 3 independent cases ***
-Ported directly from lrose-core sources (NCAR/lrose-core @
-b29264bf466d9b702dcea8825aa2486ebf0b8554):
-    codebase/libs/euclid/src/clump/ClumpingMgr.cc      (loadClumpVector)
+Port of the two-stage dual-threshold clumping algorithm from lrose-core
+@ b29264bf466d9b702dcea8825aa2486ebf0b8554:
+    codebase/libs/euclid/src/clump/ClumpingMgr.cc         (loadClumpVector)
     codebase/libs/euclid/src/clump/ClumpingDualThresh.cc  (compute, _growSubAreas)
     codebase/libs/euclid/src/clump/ClumpProps.cc          (volumeKm3, nPoints2D)
     codebase/libs/radar/src/convstrat/ConvStratFinder.cc  (_performClumping,
-                                                            StormClump::computeGeom)
+                                                           StormClump::computeGeom)
 
-The PREVIOUS version of this module did straight 3-D connected-component
-labeling directly at the secondary threshold. Baseline-tested against real
-LROSE-ECCO truth output (SPOL Taiwan case, texture_radius=4km): only 6
-clumps found, capturing 3,379 of 126,445 truth-convective pixels (2.7%
-recall) -- 96.5% of true convective pixels were mis-assigned as Mixed.
+ALGORITHM (dual-threshold clumping):
 
-The rewritten algorithm below fixed this to 98%+ convective-pixel recall
-on that same case, and has since been validated end-to-end (raw DBZ
-through texture/convectivity/clumping/classification) against 3
-independent real LROSE-ECCO cases -- SPOL, WRF, and SEA, 5 runs total
-across 2 texture-radius variants each -- achieving 99.5%-99.8%+ both-echo
-pixel agreement on every run. All 4 convective sub-types (Shallow, Mid,
-Deep, and Elevated -- the last driven by the `_strat_below()` path below,
-only exercised by the SEA 7km case) have been checked against real truth.
-See the README's "Validation status" section for the full case-by-case
-numbers and the other real bugs (a texture-prefiltering gap in
-core/texture.py; a Z-spacing convention bug for non-uniform vertical
-grids) found and fixed alongside this rewrite.
-
-ALGORITHM ("dual threshold" clumping, exact port):
-
-  Stage 1 -- PRIMARY ENVELOPE
+  Stage 1 - PRIMARY ENVELOPE
     3-D connected-component labeling of convectivity >= min_convectivity_
     for_convective (the PRIMARY threshold), 6-connectivity (face-adjacent),
-    matching LROSE's interval clumping at min_overlap=1 (the TDRP default
-    for min_overlap_for_convective_clumps in every case file seen so far;
-    general min_overlap>1 is NOT implemented here -- see note below).
-    Clumps below min_valid_volume_for_convective are DROPPED ENTIRELY at
-    this stage (never split, never emitted) -- matches loadClumpVector's
-    outer volume check gating entry to the dual-threshold split.
+    matching LROSE's interval clumping at min_overlap=1, the TDRP default
+    for min_overlap_for_convective_clumps. Other values are rejected by
+    ClassificationParams; see the note below.
+    Clumps below min_valid_volume_for_convective are dropped entirely at
+    this stage - never split, never emitted - matching loadClumpVector's
+    outer volume check, which gates entry to the dual-threshold split.
 
-  Stage 2 -- PER-CLUMP DUAL-THRESHOLD SPLIT (_dual_threshold_split)
+  Stage 2 - PER-CLUMP DUAL-THRESHOLD SPLIT (_dual_threshold_split)
     For each surviving primary clump, restricted to its 3-D bounding box:
       a. Build a 2-D "composite" grid: for each (y,x) column touched by
          the clump, the MAX convectivity among just that clump's OWN
@@ -154,7 +133,7 @@ def find_clumps_3d(convectivity: np.ndarray,
         Local point-to-point spacing, km. Used to compute each grid
         cell's volume (spacing^3) for volume filters and geometry.
     min_conv : float
-        PRIMARY threshold -- now genuinely used to build the outer
+        PRIMARY threshold, used to build the outer
         envelope clumps (stage 1), unlike the previous version.
     min_vol_km3 : float
         Volume filter, applied BOTH before splitting (stage 1) and after
@@ -186,7 +165,7 @@ def find_clumps_3d(convectivity: np.ndarray,
     Returns
     -------
     clumps : list of dicts, each with:
-        index (a (iz_arr, iy_arr, ix_arr) tuple of integer index arrays —
+        index (a (iz_arr, iy_arr, ix_arr) tuple of integer index arrays -
             use as echo_type[clump['index']] = ...),
         volume_km3, vert_extent_km,
         n_pts_total, n_pts_shallow, n_pts_mid, n_pts_deep
@@ -448,7 +427,7 @@ def _compute_geom(local_mask: np.ndarray,
     """
     Compute volume, vertical extent, and shallow/mid/deep point counts
     for ONE clump, given arrays already cropped to that clump's bounding
-    box — so every operation here touches only the clump's small local
+    box - so every operation here touches only the clump's small local
     volume, not the full grid.
     """
     iz_local, iy_local, ix_local = np.where(local_mask)

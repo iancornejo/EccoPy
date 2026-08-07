@@ -1,6 +1,6 @@
 """
 Frozen pre-Numba reference implementations of the 2D radial texture
-functions, for cross-validation only. DO NOT use these in production —
+functions, for cross-validation only. DO NOT use these in production -
 they exist solely so the Numba-converted versions can be checked against
 exactly what the code did before conversion.
 """
@@ -36,7 +36,7 @@ def _build_kernel_offsets_uniform_reference(radius_km: float, dx_km: float, dy_k
 def _max_half_width_reference(radius_km: float, dx_km: np.ndarray, dy_km: np.ndarray):
     """
     Conservative (worst-case) half-width in grid cells needed to contain
-    a `radius_km` circle anywhere on a varying-spacing grid — used to
+    a `radius_km` circle anywhere on a varying-spacing grid - used to
     size the border that must be excluded from per-point kernel mode
     (the finest spacing anywhere in the grid determines the largest
     possible cell count).
@@ -122,7 +122,7 @@ def _compute_texture_one_level_varying_reference(dbz_level: np.ndarray,
 
     This is NOT what the validated LROSE ConvStratFinder algorithm does
     (LROSE uses a single dx_km/dy_km for the whole grid, computed at the
-    domain's mean latitude — see _build_kernel_offsets_uniform_reference). Results
+    domain's mean latitude - see _build_kernel_offsets_uniform_reference). Results
     from this mode have not been validated against LROSE output and may
     differ from it on grids where LROSE's single-kernel approximation
     breaks down.

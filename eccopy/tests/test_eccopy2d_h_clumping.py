@@ -1,5 +1,5 @@
 """Tests for eccopy.eccopy2d_h.clumping.find_clumps_2d() in isolation
-from the rest of the eccopy2d_h pipeline (no texture step involved) —
+from the rest of the eccopy2d_h pipeline (no texture step involved) -
 see test_eccopy2d_h.py for the end-to-end version."""
 
 import numpy as np

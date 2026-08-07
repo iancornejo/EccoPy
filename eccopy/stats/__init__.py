@@ -1,5 +1,5 @@
 """
-eccopy.stats — generic post-classification statistics.
+eccopy.stats - generic post-classification statistics.
 
 Operates on the `echo_type` (and, for height statistics, `height`)
 arrays returned by any of eccopy1d / eccopy2d_v / eccopy2d_h / eccopy3d

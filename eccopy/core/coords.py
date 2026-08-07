@@ -13,10 +13,10 @@ supplied explicitly, either as:
     via haversine() below.
 
 This module provides:
-  haversine_distance()   — great-circle distance between two lat/lon points
-  latlon_to_xy_spacing() — convert a lat/lon grid into local dx/dy spacing
+  haversine_distance()   - great-circle distance between two lat/lon points
+  latlon_to_xy_spacing() - convert a lat/lon grid into local dx/dy spacing
                            arrays (same shape as the input grid)
-  resolve_spacing()       — internal: turn either a position array or a
+  resolve_spacing()       - internal: turn either a position array or a
                            pre-computed spacing array into a spacing array
 """
 
@@ -79,7 +79,7 @@ def latlon_to_xy_spacing(lat: np.ndarray,
     Notes
     -----
     This computes the distance from each point to its neighbour at
-    index+1 along the relevant axis — i.e. dx_km[..., i] is the distance
+    index+1 along the relevant axis - i.e. dx_km[..., i] is the distance
     from point i to point i+1 (and the final column duplicates the
     second-to-last value so the array shape is preserved).
     """

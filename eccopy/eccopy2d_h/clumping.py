@@ -1,51 +1,39 @@
 """
 2-D clumping for EccoPy-2D-H (horizontal composite data).
 
-*** NEW THIS SESSION -- design, not a port. *** There is no MATLAB or C++
-"ECCO-H" reference algorithm to match against (unlike class_basic()'s
-SEA/SPOL ground truth, or eccopy3d/clumping.py's LROSE-ECCO ground truth).
-This module instead reuses the ALGORITHM STRUCTURE that IS validated --
-eccopy3d/clumping.py's two-stage dual-threshold clumping (ClumpingDualThresh,
-ported from real lrose-core sources) -- because that algorithm's Stage 2
-(the actual splitting logic) is already a genuinely 2-D computation: it
-projects each 3-D clump down to a 2-D (Y, X) "composite" (max convectivity
-per column) before doing anything else. For single-level EccoPy-2D-H data,
-that projection is a no-op (there is only one level per column already),
-so reusing the SAME splitting mechanics here is not a guess -- it is the
-same 2-D computation the validated 3-D path already performs internally,
-just without a Z axis to project away first.
+This module has no upstream counterpart: there is no MATLAB or C++
+"ECCO-H" clumping algorithm. It reuses the structure of
+eccopy3d/clumping.py's two-stage dual-threshold clumping, which is a port
+of ClumpingDualThresh. That reuse is direct rather than analogical: the
+3-D algorithm's Stage 2 already works on a 2-D composite, projecting each
+clump to a (Y, X) maximum before splitting it. On single-level data that
+projection is the identity, so the splitting mechanics here are the same
+computation the 3-D path performs internally, minus the projection step.
 
-What genuinely differs from eccopy3d/clumping.py, and is NOT validated:
+Differences from eccopy3d/clumping.py:
 
-  - AREA, not volume. 3-D clumps are filtered by volume_km3 (spacing^3,
-    or more precisely dz*dy*dx per cell). A single horizontal level has
-    no dz -- there is no principled way to manufacture one, and the 3-D
-    code's each_subclump_min_area_km2 quirk (multiplying by dz at level
-    0 of a FULL 3-D grid) is a known artifact of ClumpProps being reused
-    for a 2-D-only computation in the C++, not something to replicate
-    here on purpose. This module computes real area (km^2) directly from
-    each pixel's own dy*dx, and filters against that -- more correct than
-    the 3-D quirk, but a genuine behavioural difference, not a match to
-    any reference.
+  - Area, not volume. 3-D clumps are filtered by volume; a single
+    horizontal level has no dz from which to build one. This module
+    computes area in km^2 from each pixel's own dy*dx and filters on
+    that.
 
-    *** CAUTION: this means each_subclump_min_area_km2 (a ClassificationParams
-    field shared with eccopy3d) means a DIFFERENT PHYSICAL QUANTITY here
-    than it does in eccopy3d/clumping.py -- true area vs. the C++'s
-    pseudo-volume quirk. Do not reuse a single ClassificationParams
-    instance, tuned/validated against 3-D cases, directly for
-    eccopy2d_h.run() and expect matching splitting behaviour at the same
-    numeric threshold value -- tune this field separately per module.
-    See README "Parameters" for the full warning. ***
+    Consequently `each_subclump_min_area_km2` - a ClassificationParams
+    field shared with eccopy3d - denotes a different physical quantity in
+    each module: true area here, a pseudo-volume in eccopy3d (where
+    ClumpProps multiplies the 2-D pixel count by dz at level 0). A single
+    ClassificationParams instance tuned for one module will not reproduce
+    its splitting behaviour in the other at the same numeric value. Tune
+    the field per module. See README "Parameters".
+
   - Primary-envelope connectivity: 4-connectivity (matching _STRUCT_4,
     the same convention eccopy3d/clumping.py's Stage-2 2-D composite
-    labeling already uses, and matching LROSE/TITAN interval clumping at
-    min_overlap=1). This is DIFFERENT from class_basic()'s 8-connectivity
-    (_CONN8, MATLAB bwconncomp convention) used for its melt-correction
-    region labeling -- that is a different codebase's convention for a
-    different purpose (rain-below-melt column detection, not storm-cell
-    identification) and should not be assumed to apply here.
-  - No height/temp/vertical-extent geometry at all -- there is nothing
-    to compute it from. Clumps carry only their index, area, and point
+    labeling uses, and matching LROSE/TITAN interval clumping at
+    min_overlap=1). class_basic() uses 8-connectivity (_CONN8, MATLAB's
+    bwconncomp convention) for its melt-correction region labeling, a
+    different convention for a different purpose - rain-below-melt column
+    detection rather than storm-cell identification.
+  - No height, temperature or vertical-extent geometry: there is nothing
+    to compute it from. Clumps carry only their index, area and point
     count.
 
 ARRAY CONVENTION: (Y, X), matching EccoPy-2D-H's data-agnostic shape

@@ -4,13 +4,13 @@ Reflectivity texture calculations.
 Two families of functions:
 
 1-D sliding-window (EccoPy-1D / EccoPy-2D)
-    refl_texture_1d() — port of f_reflTexture.m, generalised to accept a
+    refl_texture_1d() - port of f_reflTexture.m, generalised to accept a
     per-point pixel-radius array so the window size can vary along the
     array (e.g. when resolved from a physical-unit WindowSpec against a
     non-uniform spacing array).
 
 2-D radial with planar detrend (EccoPy-3D)
-    refl_texture_2d() — port of ConvStratFinder::ComputeTexture::run(),
+    refl_texture_2d() - port of ConvStratFinder::ComputeTexture::run(),
     generalised to accept per-point dy/dx spacing arrays instead of
     assuming a uniform grid.
 
@@ -66,7 +66,7 @@ def _radius_field_along_axis(window: Union[WindowSpec, int],
         return np.full(n, window, dtype=int)
     if isinstance(window, WindowSpec) and window.is_pixel:
         # Bare-pixel WindowSpec never needs a spacing array, same as a
-        # raw int radius — resolve it directly without requiring spacing.
+        # raw int radius - resolve it directly without requiring spacing.
         return window.pixel_radius_field(np.ones(n))
     if spacing is None:
         raise ValueError(
@@ -103,16 +103,16 @@ def _sliding_texture_core(data_padded: np.ndarray,
     Parameters
     ----------
     data_padded : (nRows, nCols + 2*pad) array, pre-filled (no NaN gaps)
-    radius_field : (nCols,) int array — per-point window half-width
-    pad : int — maximum radius used when padding (>= max(radius_field))
+    radius_field : (nCols,) int array - per-point window half-width
+    pad : int - maximum radius used when padding (>= max(radius_field))
 
     Implementation note
     --------------------
     This loops explicitly over (column, row, window-position) rather
     than using NumPy's row-vectorized axis=1 reductions (np.nansum,
     np.nanmean, np.nanstd, np.tile), because none of those are supported
-    in Numba's nopython mode. The math is identical — every sum below is
-    just the scalar equivalent of the array reduction it replaces — but
+    in Numba's nopython mode. The math is identical - every sum below is
+    just the scalar equivalent of the array reduction it replaces - but
     expressed as accumulation loops so this function can be JIT-compiled.
     NaN values are skipped while accumulating sums (mirroring nansum's
     drop-rather-than-substitute behaviour), with a running valid-count
@@ -204,7 +204,7 @@ def _sliding_texture_core(data_padded: np.ndarray,
                 # texture = sqrt(sample_std(corrected**2)), and
                 # std = sqrt(var) -- so this is sqrt(sqrt(var)), a
                 # FOURTH root, not sqrt(var). (Caught by exhaustive
-                # cross-validation against the pre-Numba reference —
+                # cross-validation against the pre-Numba reference -
                 # an earlier draft of this line wrote np.sqrt(var) and
                 # silently produced the SQUARE of the correct answer
                 # for most inputs; entry-point tests didn't catch it
@@ -276,7 +276,7 @@ def refl_texture_1d(dbz: np.ndarray,
         `spacing` must be provided.
     spacing : np.ndarray, shape (N,) or (..., N), optional
         Point-to-point spacing along the last axis, in the base unit
-        matching `window` (km for length, seconds for time — EccoPy's
+        matching `window` (km for length, seconds for time - EccoPy's
         run() entry points handle this conversion; see eccopy1d.run()
         and `eccopy2d_v.run()` / `eccopy2d_h.run()`). Required if `window`
         is a physical WindowSpec. A `(N,)` array (or an `(..., N)` array
@@ -294,13 +294,13 @@ def refl_texture_1d(dbz: np.ndarray,
         computed. Defaults to -inf (no gating), matching f_reflTexture.m,
         which has no such prefilter. See TextureParams.min_valid_dbz.
     kernel_mode : {"uniform", "varying"}
-        "uniform" (default) — resolve ONE radius from the median of the
+        "uniform" (default) - resolve ONE radius from the median of the
             (validated/broadcast) spacing array, applied everywhere.
             Matches per-point resolution exactly on uniform-spacing data.
-        "varying" — resolve a distinct radius at every point (and, for
+        "varying" - resolve a distinct radius at every point (and, for
             multi-row input, every row) from its own local spacing. Not
             validated against any ground truth in configurations where
-            it differs from "uniform" — see docstring above.
+            it differs from "uniform" - see docstring above.
 
     Returns
     -------
@@ -709,7 +709,7 @@ def _build_kernel_offsets_uniform(radius_km: float, dx_km: float, dy_km: float):
 def _build_kernel_offsets_uniform_arrays(radius_km: float, dx_km: float, dy_km: float):
     """
     Same kernel as _build_kernel_offsets_uniform(), but returned as four
-    typed NumPy arrays (jdx, jdy, xx, yy) instead of a list of tuples —
+    typed NumPy arrays (jdx, jdy, xx, yy) instead of a list of tuples -
     the form the JIT-compiled texture functions need, since Numba's
     nopython mode cannot work with Python lists of heterogeneous tuples.
     """
@@ -732,7 +732,7 @@ def _max_half_width_core(radius_km: float, dx_km: np.ndarray, dy_km: np.ndarray)
     """
     JIT-compiled core for _max_half_width(). Uses an explicit scan for
     the minimum positive spacing rather than boolean-mask fancy indexing
-    (dx_km[dx_km > 0]) — equivalent result, but the form Numba compiles
+    (dx_km[dx_km > 0]) - equivalent result, but the form Numba compiles
     most efficiently for this access pattern.
     """
     min_dy = np.inf
@@ -761,7 +761,7 @@ def _max_half_width_core(radius_km: float, dx_km: np.ndarray, dy_km: np.ndarray)
 def _max_half_width(radius_km: float, dx_km: np.ndarray, dy_km: np.ndarray):
     """
     Conservative (worst-case) half-width in grid cells needed to contain
-    a `radius_km` circle anywhere on a varying-spacing grid — used to
+    a `radius_km` circle anywhere on a varying-spacing grid - used to
     size the border that must be excluded from per-point kernel mode
     (the finest spacing anywhere in the grid determines the largest
     possible cell count).
@@ -778,7 +778,7 @@ def _max_half_width(radius_km: float, dx_km: np.ndarray, dy_km: np.ndarray):
 def _point_kernel_offsets(radius_km: float, dx_km_pt: float, dy_km_pt: float):
     """
     Build kernel offsets for ONE point's local spacing (per-point mode).
-    Returns a list of (jdx, jdy, xx, yy) tuples — the interface used by
+    Returns a list of (jdx, jdy, xx, yy) tuples - the interface used by
     eccopy.core.debug; see _point_kernel_offsets_arrays() for the
     typed-array equivalent used internally by the JIT-compiled texture
     functions.
@@ -850,7 +850,7 @@ def _compute_fraction_active_varying(dbz_col_max: np.ndarray,
     significantly (e.g. large lat/lon domains).
 
     JIT-compiled, including the per-point kernel rebuild (via
-    _point_kernel_offsets_arrays, itself @njit) — Numba supports calling
+    _point_kernel_offsets_arrays, itself @njit) - Numba supports calling
     one JIT-compiled function from another directly.
     """
     ny, nx = dbz_col_max.shape
@@ -894,7 +894,7 @@ def _compute_texture_one_level_varying(dbz_level: np.ndarray,
 
     This is NOT what the validated LROSE ConvStratFinder algorithm does
     (LROSE uses a single dx_km/dy_km for the whole grid, computed at the
-    domain's mean latitude — see _build_kernel_offsets_uniform). Results
+    domain's mean latitude - see _build_kernel_offsets_uniform). Results
     from this mode have not been validated against LROSE output and may
     differ from it on grids where LROSE's single-kernel approximation
     breaks down.
@@ -1042,7 +1042,7 @@ def _compute_fraction_active(dbz_col_max: np.ndarray,
     Coverage fraction array from column-max DBZ (uniform-grid kernel).
 
     `offsets` is a list of (jdx, jdy, xx, yy) tuples, matching
-    _build_kernel_offsets_uniform()'s return value — kept as the public
+    _build_kernel_offsets_uniform()'s return value - kept as the public
     interface (used directly by eccopy.core.debug) while the actual
     computation happens in the JIT-compiled _compute_fraction_active_core().
     """
@@ -1077,7 +1077,7 @@ def _compute_texture_one_level_core(dbz_level: np.ndarray,
         instead of np.linalg.lstsq, since lstsq is not supported in
         Numba's nopython mode. This is mathematically equivalent to
         lstsq EXCEPT when the system is singular/rank-deficient (e.g.
-        all valid points collinear) — the original handled that via
+        all valid points collinear) - the original handled that via
         `except np.linalg.LinAlgError: pass` (silently skip detrending);
         this version checks the normal-equations determinant directly
         and does the same thing if it's too close to zero to invert
@@ -1126,7 +1126,7 @@ def _compute_texture_one_level_core(dbz_level: np.ndarray,
             if count >= min_pts_fit:
                 # Plane fit z = a*x + b*y + c via 3x3 normal equations
                 # (equivalent to np.linalg.lstsq for this 3-parameter
-                # fit, except when singular — see docstring above).
+                # fit, except when singular - see docstring above).
                 Sx = 0.0; Sy = 0.0; Sxx = 0.0; Syy = 0.0; Sxy = 0.0
                 Sz = 0.0; Sxz = 0.0; Syz = 0.0
                 for i in range(count):
@@ -1154,7 +1154,7 @@ def _compute_texture_one_level_core(dbz_level: np.ndarray,
                           + m02 * (m10 * b2 - b1 * m20)) / det
                     for i in range(count):
                         vals[i] -= aa * vxx[i] + bb * vyy[i]
-                # else: singular system (e.g. all points collinear) —
+                # else: singular system (e.g. all points collinear) -
                 # skip detrending, same as the original's
                 # `except np.linalg.LinAlgError: pass`.
 
@@ -1211,7 +1211,7 @@ def _compute_texture_one_level(dbz_level: np.ndarray,
       4. texture = sqrt(sqrt(population_var(dbz^2)))
 
     `offsets` is a list of (jdx, jdy, xx, yy) tuples, matching
-    _build_kernel_offsets_uniform()'s return value — kept as the public
+    _build_kernel_offsets_uniform()'s return value - kept as the public
     interface (used directly by eccopy.core.debug) while the actual
     computation happens in the JIT-compiled _compute_texture_one_level_core().
     """
@@ -1254,7 +1254,7 @@ def refl_texture_2d(dbz: np.ndarray,
         Builds ONE kernel from a single representative dx_km/dy_km
         (the median of the supplied dy/dx arrays), reused at every
         point. This is what the validated LROSE ConvStratFinder
-        algorithm itself does for lat/lon grids — it computes one
+        algorithm itself does for lat/lon grids - it computes one
         dxKm/dyKm pair at the domain's mean latitude and applies it
         everywhere, rather than adjusting per point. Fast (one kernel
         built once); matches validated behaviour; becomes increasingly
@@ -1267,7 +1267,7 @@ def refl_texture_2d(dbz: np.ndarray,
         Rebuilds the kernel from the LOCAL dy[y,x]/dx[y,x] at every
         single grid point, so the kernel's physical footprint stays
         correct everywhere regardless of domain size. This is NOT what
-        LROSE does, and has not been validated against LROSE output —
+        LROSE does, and has not been validated against LROSE output -
         it is a genuine algorithmic extension for domains where the
         single-kernel approximation breaks down (e.g. continental or
         global lat/lon grids). Substantially slower: a new kernel is
@@ -1352,13 +1352,13 @@ def refl_texture_2d(dbz: np.ndarray,
     dbz_col_max = np.where(np.isnan(dbz_col_max), -9999.0, dbz_col_max)
 
     if kernel_mode == "uniform":
-        # Single representative dx_km/dy_km for the whole grid — matches
+        # Single representative dx_km/dy_km for the whole grid - matches
         # LROSE's own mean-latitude approach for lat/lon grids.
         dy_km = float(np.nanmedian(dy))
         dx_km = float(np.nanmedian(dx))
 
         # Built once as typed arrays (not the list-of-tuples form used
-        # by eccopy.core.debug) and reused across every z-level below —
+        # by eccopy.core.debug) and reused across every z-level below -
         # avoids rebuilding/reconverting the kernel per level.
         jdx_arr, jdy_arr, xx_arr, yy_arr, nx_tex, ny_tex = (
             _build_kernel_offsets_uniform_arrays(radius_km, dx_km, dy_km)
@@ -1380,7 +1380,7 @@ def refl_texture_2d(dbz: np.ndarray,
         max_nx_tex, max_ny_tex = _max_half_width(radius_km, dx, dy)
 
         # Warn if the texture radius is smaller than the local grid
-        # spacing anywhere in the domain — the kernel degenerates to just
+        # spacing anywhere in the domain - the kernel degenerates to just
         # the center point there, making texture meaningless (always 0)
         # at those locations regardless of kernel_mode.
         coarsest_dx = float(np.nanmax(dx[dx > 0])) if np.any(dx > 0) else np.nan

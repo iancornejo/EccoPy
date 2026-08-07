@@ -1,12 +1,12 @@
 """
-eccopy.core.disk — MATLAB-faithful disk structuring elements, generated
+eccopy.core.disk - MATLAB-faithful disk structuring elements, generated
 in pure Python for ARBITRARY radius (no MATLAB, no pre-exported .mat).
 
 Reproduces MATLAB's ``strel('disk', r)`` (default ``n = 4`` periodic-line
 approximation) and its ``getsequence()`` decomposition, bit-for-bit,
 without requiring anyone to pre-export a .mat file per radius. Validated
 bit-exact against the MATLAB ground truth bundled in ``core/data/``
-(strel radii 3, 5, 15, 25; decomposition radii 15, 25) — see
+(strel radii 3, 5, 15, 25; decomposition radii 15, 25) - see
 ``tests/test_disk_generator.py``.
 
 Why this exists
@@ -14,13 +14,13 @@ Why this exists
 ``strel('disk', r)`` with the default ``n = 4`` does **not** return a
 Euclidean disk. It returns an OCTAGON built by dilating a single point
 with four periodic-line structuring elements (0°, 45°, 90°, 135°) plus
-two unit correction lines — the radial decomposition of Rolf Adams,
+two unit correction lines - the radial decomposition of Rolf Adams,
 *Radial Decomposition of Discs and Spheres* (CVGIP: GMIP, 1993). EccoPy
 previously loaded the resulting ``.Neighborhood`` arrays from
 MATLAB-exported .mat files, which pinned every disk-based operation
 (``enlarge_mixed`` / ``enlarge_conv`` morphology and the ``imclose``
 decompositions they trigger at radius ``enlarge×3`` / ``enlarge×5``) to
-the handful of radii someone had remembered to export — e.g.
+the handful of radii someone had remembered to export - e.g.
 ``enlarge_conv=15`` failed because nobody had exported the radius-75
 decomposition. This module removes that limitation while preserving the
 exact MATLAB shape, so the classification path stays faithful to every
@@ -111,7 +111,7 @@ def disk_decomposition(r: int, n: int = 4) -> List[np.ndarray]:
         Disk radius (pixels).
     n : int
         Periodic-line count. Only ``4`` (MATLAB default, the EccoPy path)
-        and ``0`` (no decomposition — a single Euclidean-disk element)
+        and ``0`` (no decomposition - a single Euclidean-disk element)
         are supported.
 
     Returns
@@ -144,7 +144,7 @@ def disk_neighborhood(r: int, n: int = 4) -> np.ndarray:
     """
     MATLAB ``strel('disk', r, n).Neighborhood`` as a boolean array.
 
-    ``n = 4`` (default) returns the periodic-line octagon — bit-exact to
+    ``n = 4`` (default) returns the periodic-line octagon - bit-exact to
     MATLAB and to EccoPy's previously-exported masks. ``n = 0`` returns
     the true Euclidean disk (``x^2 + y^2 <= r^2``), a ``(2r+1)`` array,
     for callers who explicitly want the un-approximated shape.
@@ -173,7 +173,7 @@ def disk_neighborhood(r: int, n: int = 4) -> np.ndarray:
 def neighborhood_from_decomposition(r: int, n: int = 4) -> np.ndarray:
     """
     Build the neighborhood by actually dilating a point through the
-    decomposition — the way MATLAB derives ``.Neighborhood`` from
+    decomposition - the way MATLAB derives ``.Neighborhood`` from
     ``getsequence``. Equal to ``disk_neighborhood(r, n)`` for all r; kept
     as an independent cross-check (see the reconstruction test).
     """

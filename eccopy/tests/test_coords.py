@@ -1,4 +1,4 @@
-"""Tests for eccopy.core.coords — haversine and spacing-resolution helpers."""
+"""Tests for eccopy.core.coords - haversine and spacing-resolution helpers."""
 
 import numpy as np
 import pytest
@@ -89,7 +89,7 @@ def test_resolve_spacing_invalid_mode():
 
 
 # ---------------------------------------------------------------------------
-# time_to_distance_km — wind-advected (Taylor's hypothesis) distance
+# time_to_distance_km - wind-advected (Taylor's hypothesis) distance
 # ---------------------------------------------------------------------------
 
 def test_time_to_distance_constant_wind():

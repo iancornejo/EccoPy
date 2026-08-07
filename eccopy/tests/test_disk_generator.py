@@ -3,8 +3,8 @@ Ground-truth tests for eccopy.core.disk.
 
 The pure-Python disk generator must reproduce MATLAB's strel('disk', r, 4)
 and its getsequence() decomposition bit-for-bit. These tests pin that
-against the exported MATLAB .mat masks bundled under core/data/ — turning
-those fixtures into regression guards — and check internal consistency
+against the exported MATLAB .mat masks bundled under core/data/ - turning
+those fixtures into regression guards - and check internal consistency
 (the closed-form octagon equals the decomposition-built neighborhood)
 across a wide radius range where no MATLAB export exists.
 """
@@ -70,7 +70,7 @@ def test_octagon_shape_invariants(r):
 
 
 def test_euclidean_option_differs_from_octagon():
-    # n=0 is the true disk (2r+1), n=4 is the octagon (2r-1) — different by design.
+    # n=0 is the true disk (2r+1), n=4 is the octagon (2r-1) - different by design.
     eu = disk_neighborhood(15, n=0)
     oc = disk_neighborhood(15, n=4)
     assert eu.shape == (31, 31)

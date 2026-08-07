@@ -1,5 +1,5 @@
 """
-EccoPy — Radar Echo Classification (Python port of ECCO / ConvStratFinder).
+EccoPy - Radar Echo Classification (Python port of ECCO / ConvStratFinder).
 
 Modules
 -------
@@ -10,10 +10,10 @@ eccopy3d    : 3-D volume (Z, Y, X), with optional sub-classification.
 
 Helper
 ------
-eccopy.core.coords.haversine_distance()   — great-circle distance between two points.
-eccopy.core.coords.latlon_to_xy_spacing() — convert lat/lon grid to dx/dy spacing arrays.
-eccopy.core.coords.resolve_spacing()      — convert position arrays to spacing arrays.
-eccopy.core.coords.time_to_distance_km()  — wind-advected distance from a time series.
+eccopy.core.coords.haversine_distance()   - great-circle distance between two points.
+eccopy.core.coords.latlon_to_xy_spacing() - convert lat/lon grid to dx/dy spacing arrays.
+eccopy.core.coords.resolve_spacing()      - convert position arrays to spacing arrays.
+eccopy.core.coords.time_to_distance_km()  - wind-advected distance from a time series.
 
 Quick start
 -----------

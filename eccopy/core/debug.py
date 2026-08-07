@@ -2,7 +2,7 @@
 Debug / introspection helpers for EccoPy's texture calculations.
 
 These functions are NOT used by the production pipeline (refl_texture_1d,
-refl_texture_2d) — they exist purely so you can inspect the intermediate
+refl_texture_2d) - they exist purely so you can inspect the intermediate
 quantities that the validated production code computes and discards:
 the raw windowed data, the fitted trend, and the detrended residual.
 
@@ -33,7 +33,7 @@ class TextureDebug1D:
     fit_x:           np.ndarray         # 1..W, the x-coordinate used for the linear fit
     fit_slope:       float              # fitted line slope (b)
     fit_intercept:   float              # fitted line intercept (a)
-    fitted_line:     np.ndarray         # a + b*x — the trend that gets removed
+    fitted_line:     np.ndarray         # a + b*x - the trend that gets removed
     mean_dbz:        float              # mean of window_dbz (added back after detrending)
     detrended:       np.ndarray         # window_dbz - fitted_line + mean_dbz, clipped to >= 1
     texture:         float              # sqrt(population_std(detrended**2))
@@ -63,8 +63,8 @@ def refl_texture_1d_debug(dbz: np.ndarray,
         Which point (0-based, into the ORIGINAL unpadded array) to inspect.
     spacing : np.ndarray, optional
         Same spacing array you would pass to refl_texture_1d (already
-        converted to the window's base unit — e.g. metres for a
-        WindowSpec((_, 'km')) — exactly as eccopy1d.run() does internally;
+        converted to the window's base unit - e.g. metres for a
+        WindowSpec((_, 'km')) - exactly as eccopy1d.run() does internally;
         see that function if you want to replicate it from km coords).
     dbz_base : float
         Same dbz_base you would pass to refl_texture_1d.
@@ -120,7 +120,7 @@ def refl_texture_1d_debug(dbz: np.ndarray,
 
     lo = pad + index - r
     hi = pad + index + r + 1
-    block = padded[0, lo:hi]              # (W,) — the raw (gap-filled) window
+    block = padded[0, lo:hi]              # (W,) - the raw (gap-filled) window
     W = block.shape[0]
 
     window_indices = np.arange(index - r, index + r + 1)
@@ -229,10 +229,10 @@ def refl_texture_2d_debug(dbz_level: np.ndarray,
     min_valid_dbz : float
         Same parameter you would pass to refl_texture_2d. Used (together
         with dbz_col_max) to compute fraction_active exactly as
-        production does — NOT simply "is this kernel point non-NaN".
+        production does - NOT simply "is this kernel point non-NaN".
     kernel_mode : {"uniform", "varying"}
         Whether to build the kernel from this point's local spacing
-        ("varying") or from the grid's median spacing ("uniform") — see
+        ("varying") or from the grid's median spacing ("uniform") - see
         refl_texture_2d's kernel_mode documentation. Matching whichever
         mode you used in the real run will reproduce its exact kernel.
     dbz_col_max : np.ndarray, shape (ny, nx), optional
@@ -240,7 +240,7 @@ def refl_texture_2d_debug(dbz_level: np.ndarray,
         For genuinely single-level data (EccoPy-2D-H, or a 3-D volume
         with only one level), this equals dbz_level and may be omitted.
         For one level WITHIN a 3-D volume, fraction_active is computed
-        from the FULL volume's column-max, not from this level alone —
+        from the FULL volume's column-max, not from this level alone -
         pass that column-max array here (np.nanmax(dbz_3d, axis=0)) to
         get a fraction_active that matches production exactly. If
         omitted, dbz_level is used as a stand-in, which is only exact
@@ -250,7 +250,7 @@ def refl_texture_2d_debug(dbz_level: np.ndarray,
     -------
     TextureDebug2D
         If (iy, ix) falls within the border excluded by production (width
-        ny_tex/nx_tex cells from each edge — the kernel would extend past
+        ny_tex/nx_tex cells from each edge - the kernel would extend past
         the array there), this returns texture=NaN with empty kernel
         arrays, matching production's behaviour exactly: that border is
         never computed regardless of whether enough valid data exists,
@@ -287,7 +287,7 @@ def refl_texture_2d_debug(dbz_level: np.ndarray,
 
     # The production functions (_compute_texture_one_level /
     # _compute_texture_one_level_varying) hard-exclude a border of width
-    # ny_tex/nx_tex from computation entirely — points there are left NaN
+    # ny_tex/nx_tex from computation entirely - points there are left NaN
     # even if the kernel COULD be clipped to fit, because the production
     # loop's range() never visits them. Reproduce that here so this debug
     # function never silently disagrees with production at edge points.
@@ -303,7 +303,7 @@ def refl_texture_2d_debug(dbz_level: np.ndarray,
     n_kernel = len(offsets)
 
     # fraction_active is computed from dbz_col_max >= min_valid_dbz over
-    # the kernel footprint — this is what production's _compute_fraction_
+    # the kernel footprint - this is what production's _compute_fraction_
     # active() does, computed once from the column-max field (which, for
     # one level within a 3-D volume, is NOT the same as this level's own
     # valid-point count; see the dbz_col_max parameter note above).
@@ -351,7 +351,7 @@ def refl_texture_2d_debug(dbz_level: np.ndarray,
 
     # Production's THIRD gate: this level's own valid-kernel-point count
     # (NOT fraction_active) must meet min_pts_texture, computed from
-    # min_frac_texture * n_kernel — same threshold value, different
+    # min_frac_texture * n_kernel - same threshold value, different
     # variable than the fraction_active check above.
     min_pts_texture = int(min_frac_texture * n_kernel + 0.5)
     if n_valid < min_pts_texture:
