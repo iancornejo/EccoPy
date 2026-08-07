@@ -58,7 +58,7 @@ eccopy = ["core/data/disk_strels/*.mat", "core/data/disk_decomp/*.mat"]
 testpaths = ["eccopy/tests"]
 addopts = "-v"
 markers = [
-    "slow: builds a real wheel; slower than the rest of the suite",
+    "slow: builds a real wheel or runs an example end-to-end; slower than the rest of the suite",
 ]
 
 [tool.coverage.run]

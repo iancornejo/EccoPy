@@ -113,6 +113,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `eccopy/core/data/disk_strels/`.
 
 ### Fixed
+- **`examples/example_2d_v.py` was broken**, passing a `vert_params`
+  argument removed from `eccopy2d_v.run()`, and nothing exercised it.
+  `tests/test_examples.py` now checks every keyword each example passes to
+  a `run()` against that module's real signature, and runs each script
+  end to end under the `slow` marker.
 - **`conda-recipe/meta.yaml` still required `scikit-learn`**, removed as a
   dependency in this release, and pointed its `home`/`doc_url`/`dev_url` at
   a non-existent repository. The recipe-maintainers placeholder is also
@@ -167,6 +172,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `build` added to the `dev` extra: `test_packaging.py` `importorskip`s
   it, so a documented dev install previously skipped the wheel-build
   check and reported a lower test count than a full run.
+
+- **`examples/` rewritten** to mirror the workflow notebooks: each script
+  now runs on the real bundled data, spells out every parameter that
+  module consumes with its default, prints the intermediates and
+  statistics, and optionally writes a figure with `--outdir`. Adds
+  `examples/README.md`.
 
 ### Changed
 - **`texture_limit_low`, `use_dbz_col_max` and `dbz_for_echo_tops` are now
