@@ -1,0 +1,63 @@
+cff-version: 1.2.0
+title: "EccoPy: a data-agnostic Python implementation of the ECCO radar echo classification algorithm"
+message: >-
+  If you use this software, please cite both the software itself and the
+  papers describing the algorithm it implements, listed under references.
+  EccoPy is an independent implementation; the ECCO algorithm is the work
+  of U. Romatschke and M. J. Dixon, cited there.
+type: software
+authors:
+  - given-names: Ian Christian
+    family-names: Cornejo
+    orcid: "https://orcid.org/0009-0007-7030-9790"
+    affiliation: Colorado State University
+repository-code: "https://github.com/iancornejo/EccoPy"
+abstract: >-
+  EccoPy separates convective from stratiform radar echo using the ECCO
+  (Echo Classification from COnvectivity) algorithm, in four variants
+  covering 1-D series, vertical cross-sections, horizontal composites and
+  full 3-D volumes. It operates purely on NumPy arrays and performs no file
+  I/O, making it independent of coordinate system, file format and radar
+  type. The classification path is ported from the reference MATLAB ECCO-V
+  and C++ ConvStratFinder implementations developed at the NSF National
+  Center for Atmospheric Research.
+keywords:
+  - radar
+  - meteorology
+  - precipitation
+  - convection
+  - echo classification
+license: BSD-3-Clause
+version: 1.0.0
+date-released: "2026-08-07"
+references:
+  - type: article
+    title: >-
+      Three-Dimensional Convective-Stratiform Echo-Type Classification and
+      Convectivity Retrieval from Radar Reflectivity
+    authors:
+      - given-names: Michael J.
+        family-names: Dixon
+      - given-names: Ulrike
+        family-names: Romatschke
+    journal: Journal of Atmospheric and Oceanic Technology
+    volume: 39
+    issue: 11
+    year: 2022
+    doi: 10.1175/JTECH-D-22-0018.1
+  - type: article
+    title: >-
+      Vertically Resolved Convective-Stratiform Echo-Type Identification and
+      Convectivity Retrieval for Vertically Pointing Radars
+    authors:
+      - given-names: Ulrike
+        family-names: Romatschke
+      - given-names: Michael J.
+        family-names: Dixon
+    journal: Journal of Atmospheric and Oceanic Technology
+    volume: 39
+    issue: 11
+    start: 1705
+    end: 1716
+    year: 2022
+    doi: 10.1175/JTECH-D-22-0019.1

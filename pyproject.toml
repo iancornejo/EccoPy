@@ -1,27 +1,32 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+# setuptools >= 77 for PEP 639 SPDX license expressions.
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "eccopy"
 dynamic = ["version"]
-description = "Data-agnostic Python implementation of the ECCO / ConvStratFinder radar echo classification algorithm (1-D, 2-D-V, 2-D-H, 3-D). Operates purely on numpy arrays — no file I/O."
+description = "Data-agnostic Python implementation of the ECCO / ConvStratFinder radar echo classification algorithm (1-D, 2-D-V, 2-D-H, 3-D). Operates purely on numpy arrays, with no file I/O."
 readme = "README.md"
-license = { text = "BSD-3-Clause" }
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
     { name = "NCAR-EOL", email = "romatschke@ucar.edu" },
 ]
+maintainers = [
+    { name = "Ian Christian Cornejo" },
+]
 keywords = ["radar", "meteorology", "precipitation", "convection", "echo-classification"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Atmospheric Science",
-    "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
