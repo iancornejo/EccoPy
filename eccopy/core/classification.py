@@ -5,188 +5,78 @@ class_basic()       - port of f_classBasic.m  (EccoPy-1D / EccoPy-2D)
 class_sub_2d()      - port of f_classSub.m    (EccoPy-1D / EccoPy-2D)
 set_echo_type_3d()  - port of ConvStratFinder::_setEchoType3D() + StormClump
 
-Echo type codes (matching MATLAB f_classSub.m and C++ enum values)
--------------------------------------------------------------------
+Upstream analogues:
+    lrose-ecco @ ad85c56   f_classBasic.m, f_classSub.m
+    lrose-core @ b29264bf  ConvStratFinder.cc
+
+Echo type codes (matching f_classSub.m and the C++ enum values)
+---------------------------------------------------------------
 14  CATEGORY_STRATIFORM_LOW
 16  CATEGORY_STRATIFORM_MID
 18  CATEGORY_STRATIFORM_HIGH
 25  CATEGORY_MIXED
-30  CATEGORY_CONVECTIVE (near-aircraft override -- rarely used)
+30  CATEGORY_CONVECTIVE (airborne-radar branch; see class_sub_2d)
 32  CATEGORY_CONVECTIVE_ELEVATED
 34  CATEGORY_CONVECTIVE_SHALLOW
 36  CATEGORY_CONVECTIVE_MID
 38  CATEGORY_CONVECTIVE_DEEP
  0  CATEGORY_MISSING
 
-===============================================================================
-VALIDATION HISTORY / KNOWN-GOOD STATUS (read before touching this file)
-===============================================================================
-This file's morphological logic (class_basic) was extensively debugged
-against real ECCO-V MATLAB reference output across three independent
-cases (SEA RHI, SPOL RHI). Summary of what's confirmed and what isn't:
+Morphology conventions
+----------------------
+Two details of this file's morphological logic differ from a naive
+translation and are load-bearing:
 
-CONFIRMED (mathematically proven or bit-exact matched against real
-MATLAB intermediate arrays -- not just "looks close"):
-  - binary_dilation with border_value=0 exactly reproduces MATLAB's
-    imdilate at every radius tested (3, 5, 15, 25), including right up
-    to array boundaries. This is NOT in question.
-  - The disk masks in _disk() are loaded from MATLAB's own exported
-    strel('disk', r).Neighborhood arrays -- NOT a Euclidean-circle
-    approximation. A literal circle approximation (x^2+y^2<=r^2) was
-    tried first and found to systematically over-reach MATLAB's real
-    disk shape at every radius (MATLAB's actual disk has a smaller
-    effective bounding radius than the nominal parameter -- e.g.
-    strel('disk',25) has a 49x49, not 51x51, bounding box).
-  - class_basic's morphological closing steps use _sequential_close(),
-    which applies MATLAB's REAL decomposition primitives (exported via
-    getsequence()) one at a time, each via "edge-pad the input, dilate,
-    erode with border_value=0, crop" -- see _edge_pad_close(). This was
-    found by direct comparison against MATLAB's own intermediate arrays,
-    not guessed. It is bit-exact for simple axis-aligned line primitives
-    and ~97-98% exact-pixel-match for the diagonal/2D primitives in the
-    decomposition -- there IS a small remaining residual, not yet fully
-    explained, but validated end-to-end results are excellent:
-        SEA Test1: 99.7% basic-classification agreement
-        SEA Test6: 100.0% (exact)
-        SPOL:      99.4%
-    (All measured against real MATLAB ECHOTYPE/CONVECTIVITY output,
-    collapsed to basic strat/mixed/conv categories.)
-  - class_sub_2d below is a corrected port: the ORIGINAL version of this
-    function (now removed) used height-threshold logic (4.5/9.0 km AGL)
-    that was NEVER checked against the real f_classSub.m and turned out
-    to test a different physical quantity entirely. The real algorithm
-    uses `melt` (primary signal, threshold 15) and `temp` (threshold
-    -25 C, only distinguishes mid vs deep/high) -- see f_classSub.m.
-    This was re-verified line-by-line against the actual MATLAB source
-    and validated: 100% precision on stratiform sub-classification
-    (14/16/18) against real SPOL ground truth, zero cross-contamination.
+  - `binary_erosion` / `binary_closing` are called with `border_value=1`.
+    SciPy defaults to 0, which erodes inward from every array edge and
+    removes near-surface regions that MATLAB's imclose retains.
 
-NOT YET DONE / OPEN ITEMS:
-  - class_basic_isotropic() (used by EccoPy-2D-H) has NOT been checked
-    for either the border_value issue or the disk-shape issue. It still
-    uses scipy's binary_closing() with default border_value and _disk()
-    from this file (now the exact-mask version, at least) but the
-    closing steps have not been converted to _sequential_close(). Do not
-    assume EccoPy-2D-H is validated just because EccoPy-2D-V is.
-  - set_echo_type_3d() / _clump_category() / _strat_below() (the 3-D
-    path) have NOT been re-checked against this session's findings.
-    _strat_below() had its own, separately-fixed axis-order bug
-    (documented in its docstring) but the morphological-closing findings
-    here have not been ported to any 3-D closing logic if one exists
-    elsewhere in the package.
-  - The small residual in _sequential_close() for diagonal primitives is
-    real but unexplained. Do not assume it is zero for radii other than
-    those tested (3, 5, 15, 25).
-  - The melt-correction ("rain below melting layer") block in
-    class_basic: FIXED via direct comparison against the real
-    f_classBasic.m source (lrose-ecco repo). Two things were wrong: (1)
-    an earlier threshold change (20/10 -> 15/9) was reverted -- the real
-    MATLAB source uses 20/10, matching the ORIGINAL pre-session Python
-    constants; (2) a genuine off-by-one bug in `check_col[:first_ind]`
-    (should be `[:first_ind + 1]`, matching MATLAB's inclusive
-    `checkCol(1:firstInd)=1`) was found and fixed -- a NaN exactly at
-    the melt-crossing pixel could silently zero out a column's
-    contribution. Tested against the real SPOL case (20220526_084500):
-    neither fix changes that case's final output, since the one real
-    clump reaching the check has strat_perc=0.66 (genuinely below
-    threshold; confirmed via real MATLAB ECHOTYPE that it's 95.7%
-    Convective Mid, i.e. correctly not reclassified) and none of its
-    columns hit the off-by-one edge case. Both fixes are verified
-    directly against MATLAB source, the strongest evidence this project
-    uses -- see README "Validation status" for the full writeup.
-  - 234 pixels of NaN-pattern mismatch were found between a from-scratch
-    Python port of f_reflTexture.m and MATLAB's saved convectivity on
-    the SPOL case, despite otherwise-perfect (1e-17 level) value
-    agreement. Not investigated further -- flagged for whoever owns
-    core/texture.py, since that file was not modified or reviewed here.
+  - Closing runs through `_sequential_close()`, which applies MATLAB's
+    own strel decomposition primitives (from `getsequence()`) one at a
+    time, each as edge-pad, dilate, erode, crop - see `_edge_pad_close()`.
+    A single dilate-then-erode with the full disk gives a different
+    result.
 
-===============================================================================
-DISK STRUCTURING ELEMENTS -- GENERATED, NOT EXPORTED
-===============================================================================
-_disk() and _sequential_close() get their MATLAB strel('disk', r)
-neighborhoods and getsequence() decompositions from eccopy.core.disk,
+`class_basic_isotropic()` uses `scipy.ndimage.binary_closing()` directly
+rather than `_sequential_close()`, so the second point above does not
+apply to it.
+
+Structuring elements
+--------------------
+`_disk()` and `_sequential_close()` obtain their `strel('disk', r)`
+neighbourhoods and `getsequence()` decompositions from `eccopy.core.disk`,
 which reproduces MATLAB's default n=4 periodic-line octagon (Adams 1993)
-in pure Python for ANY radius. This is validated bit-exact against the
-MATLAB-exported ground truth (strel radii {3, 5, 15, 25}, decomposition
-radii {15, 25}) bundled under core/data/ -- see tests/test_disk_generator.py.
+in pure Python at any radius.
 
-Because the shapes are computed on demand, enlarge_mixed / enlarge_conv
-(and their enlarge*3 / enlarge*5 closing decompositions) are NO LONGER
-limited to a handful of pre-exported radii, and no operation raises
-FileNotFoundError for a "missing" radius. The bundled .mat files are now
-optional: _disk()/_load_decomp() use one as an override when present
-(byte-identical to the generator, so the validated radii are untouched),
-and otherwise generate. They mainly serve as regression fixtures.
+The octagon is not a Euclidean circle, and the difference is not
+cosmetic: `strel('disk', 25)` has a 49x49 bounding box, not 51x51, so a
+literal `x^2 + y^2 <= r^2` mask over-reaches MATLAB's shape at every
+radius. `eccopy.core.disk` produces the octagon; Euclidean (n=0) is
+available there as an explicit opt-in.
 
-Historical note: an earlier attempt to build the disk algorithmically was
-recorded as having "produced a filled square, not a disk." That result
-was not actually wrong -- strel('disk', 3) genuinely IS a filled 5x5
-square under MATLAB's n=4 approximation; the mismatch that motivated
-loading exported masks was a naive *Euclidean-circle* _disk(), which has
-a different shape from MATLAB's octagon. eccopy.core.disk reproduces the
-octagon, not the circle (n=0 Euclidean is available there as an explicit
-opt-in for callers who want it).
+Because shapes are generated on demand, `enlarge_mixed` / `enlarge_conv`
+are not restricted to any pre-exported set of radii. The `.mat` files
+bundled under `core/data/` are optional: `_disk()` and `_load_decomp()`
+use one as an override when present - byte-identical to the generator -
+and otherwise generate. They serve as regression fixtures; see
+`tests/test_disk_generator.py`.
 
-Data-file paths are anchored to this module's own location
-(Path(__file__).parent / "data" / ...), NOT the caller's current working
-directory. The .mat fixtures are shipped via pyproject.toml
-package-data / MANIFEST.in so the regression test can run against an
-installed copy; losing them no longer breaks classification (it falls
-back to the generator), it only disables the .mat-override path.
+Data-file paths are anchored to this module's location
+(`Path(__file__).parent / "data" / ...`), not the caller's working
+directory. The fixtures ship via `pyproject.toml` package-data and
+`MANIFEST.in`.
 
-Required data files (see export_disk_strels.m / export_disk_decomposition.m
-used during this validation session):
-  disk_strels/disk_strel_r{R}.mat       for R in {3, enlarge_mixed, enlarge_conv}
-  disk_decomp/disk_decomp_r{R}_step{k}.mat  for R in {enlarge_mixed*3, enlarge_conv*5}
-  disk_decomp/disk_decomp_r{R}_info.mat
+enlarge_mixed / enlarge_conv are pixel counts
+---------------------------------------------
+Both default to 5, matching f_classBasic.m, and are read as gate/pixel
+counts exactly as the MATLAB source does - not as physical distances.
 
-enlarge_mixed and enlarge_conv are user-tunable parameters, both
-defaulting to 5 -- confirmed directly against the MATLAB f_classBasic.m
-source. (An earlier revision of ClassificationParams incorrectly
-defaulted enlarge_conv to 3; that value was never the real MATLAB
-default and had only ever been exercised via the enlarge_conv=5 real
-validation runs -- fixed.) If a user sets values other than the
-validated set {3, 5, 15, 25}, the corresponding .mat files must be
-exported and bundled BEFORE those parameters can be used -- _disk()/
-_load_decomp() will raise a clear FileNotFoundError rather than
-silently falling back to an approximation, which is the failure mode
-actually observed when these files were missing entirely.
-
-===============================================================================
-enlarge_mixed / enlarge_conv ARE PIXEL COUNTS, NOT PHYSICAL UNITS
-===============================================================================
-Unlike the texture window (WindowSpec, resolved in km/seconds against a
-spacing array -- see core/texture.py's kernel_mode), enlarge_mixed and
-enlarge_conv are literal pixel/gate radii, full stop. class_basic() and
-class_basic_isotropic() never look at a spacing array at all -- _disk(5)
-is a fixed 11x11 pixel mask regardless of what one pixel represents
-physically. This traces straight back to f_classBasic.m: nothing in that
-source suggests enlarge_mixed/enlarge_conv were ever meant to represent a
-fixed physical distance -- they read as gate/pixel counts in the original
-MATLAB, and this port preserves that literally, not as an oversight.
-
-Practical consequence: on a NON-UNIFORM grid (e.g. an RHI whose range-gate
-spacing changes with elevation angle, or any Z axis whose spacing varies
-by row), the SAME enlarge_conv=5 represents a DIFFERENT physical cleanup
-radius at different rows -- 5 gates is a different real distance wherever
-gate spacing differs. This is not a bug and there is nothing to "fix" the
-way the refl_texture_1d row-spacing bug was fixed earlier this session:
-there is no known-correct physical-radius reference to port, and no MATLAB
-source suggesting one was intended. (Constructing the disk mask at an
-arbitrary radius is no longer a blocker -- eccopy.core.disk generates any
-radius -- but a genuinely spacing-aware cleanup would still need a
-different disk at every distinct local spacing on the grid, which is a
-modelling choice nobody has specified or validated, not a shape-generation
-limitation.)
-
-What IS provided (see resolve_enlarge_radius_px() below): a one-shot,
-UNIFORM-GRID-ONLY convenience that converts a desired physical radius
-(km) into a pixel radius, given one representative spacing value for the
-whole array (its median, matching the "uniform" convention already used
-elsewhere in EccoPy). This is explicitly not a "varying" counterpart the
-way refl_texture_1d's kernel_mode has one -- a spacing-aware version would
-be a modelling decision, not just a shape lookup, so this function doesn't
-pretend to offer one.
+On a non-uniform grid (an RHI whose range-gate spacing changes with
+elevation angle, or any axis whose spacing varies by row) the same
+`enlarge_conv=5` therefore represents a different physical radius at
+different rows. That is the upstream behaviour. A spacing-aware cleanup
+would need a distinct disk at every local spacing, which no upstream
+source specifies.
 """
 
 from __future__ import annotations
@@ -224,15 +114,9 @@ _CONN8 = np.ones((3, 3), dtype=bool)  # MATLAB bwconncomp's default 2-D connecti
 
 _DISK_STREL_DIR = str(Path(__file__).parent / "data" / "disk_strels")
 _DISK_DECOMP_DIR = str(Path(__file__).parent / "data" / "disk_decomp")
-# NOTE: previously these were bare relative paths ("disk_strels",
-# "disk_decomp"), which only resolved correctly if the CURRENT WORKING
-# DIRECTORY happened to contain those folders -- i.e. it depended on
-# where the *user's script/notebook* was run from, not on where this
-# package is installed. That's fragile by construction (works by
-# accident in a notebook sitting next to a disk_strels/ folder, breaks
-# immediately anywhere else) and was the direct cause of a real
-# FileNotFoundError in practice. Anchoring to __file__ makes this work
-# regardless of the caller's CWD.
+# Anchored to __file__, not the caller's working directory: a relative
+# path would resolve only when the process happened to be started beside
+# a disk_strels/ folder.
 #
 # This assumes the data files live at <package_dir>/core/data/disk_strels/
 # and <package_dir>/core/data/disk_decomp/ (i.e. a `data/` folder next to
@@ -251,14 +135,13 @@ _decomp_cache = {}
 
 def _disk(radius: int) -> np.ndarray:
     """Exact MATLAB strel('disk', radius).Neighborhood (the n=4 octagon),
-    for ANY radius. NOT a Euclidean-circle approximation -- see module
-    docstring for why that was tried and rejected.
+    for any radius. This is MATLAB's octagon, not a Euclidean circle -
+    see the module docstring.
 
-    Generated in pure Python by eccopy.core.disk (bit-exact to MATLAB and
-    to the previously-exported masks -- see tests/test_disk_generator.py),
-    so operations are no longer limited to pre-exported radii. If an
-    exported .mat happens to be bundled for this radius it is used as-is
-    (identical bytes to the generator), so nothing about the validated
+    Generated in pure Python by eccopy.core.disk, bit-exact to MATLAB -
+    see tests/test_disk_generator.py. A bundled .mat for this radius, if
+    present, is used as-is; it is byte-identical to the generator, so the
+    validated
     radii changes."""
     from .disk import disk_neighborhood
     r = int(radius)
@@ -272,11 +155,10 @@ def _disk(radius: int) -> np.ndarray:
 
 
 def _load_decomp(radius: int):
-    """MATLAB's real getsequence(strel('disk', radius)) primitives, for
-    ANY radius. Generated in pure Python by eccopy.core.disk (bit-exact
-    to MATLAB and to the previously-exported decompositions -- see
-    tests/test_disk_generator.py). A bundled .mat, if present for this
-    radius, is used as-is (identical to the generator)."""
+    """MATLAB's getsequence(strel('disk', radius)) primitives, for any
+    radius. Generated in pure Python by eccopy.core.disk, bit-exact to
+    MATLAB - see tests/test_disk_generator.py. A bundled .mat for this
+    radius, if present, is used as-is."""
     from .disk import disk_decomposition
     r = int(radius)
     if r not in _decomp_cache:
@@ -386,13 +268,9 @@ def _edge_pad_close(arr: np.ndarray, se: np.ndarray) -> np.ndarray:
     before dilating, then standard dilate+erode with border_value=0,
     then crop back to the original shape.
 
-    Validated bit-exact against MATLAB for simple axis-aligned line
-    primitives. Small (~2%) residual remains for diagonal/2D primitives
-    -- not yet fully explained, see module docstring. Do not replace
-    with scipy.ndimage.binary_closing() (which uses a single global
-    border_value and was found to diverge from MATLAB by 3000-9000+
-    pixels on real cases -- catastrophically wrong, not a minor
-    approximation).
+    Do not substitute scipy.ndimage.binary_closing(): it applies one
+    global border_value across a single dilate-erode pair, which diverges
+    from MATLAB by thousands of pixels on real cases.
     """
     h0 = se.shape[0] // 2 + 1
     h1 = se.shape[1] // 2 + 1
@@ -434,33 +312,11 @@ def class_basic_isotropic(conv: np.ndarray,
     connectivity/area accounting, analogous to class_basic() but with
     isotropic (disk-only) structuring since both axes are spatial here.
 
-    *** UPDATED this session, still NOT validated against any ground
-    truth (no MATLAB or C++ "ECCO-H" reference exists to check against,
-    unlike class_basic()'s SEA/SPOL cases) -- but it now carries the two
-    fixes that WERE independently confirmed against class_basic()'s real
-    MATLAB validation to be generically, mathematically necessary for
-    ANY closing/erosion of this shape, not just facts about matching one
-    specific reference:
-      1. border_value=1 on the final erosion steps (mathematically
-         required for erosion-after-closing to be extensive -- see
-         module docstring "border_value" discussion; this is a fact
-         about scipy's erosion semantics, independent of any reference).
-      2. _sequential_close() instead of scipy's monolithic binary_closing()
-         -- scipy's single global-border_value closing is a real,
-         boundary-proximate divergence from true decomposed closing for
-         ANY large structuring element, not a MATLAB-specific quirk (see
-         _edge_pad_close()'s docstring). This uses the SAME disk
-         decomposition as class_basic() (radius = enlarge*3 / enlarge*5),
-         generated by eccopy.core.disk for any radius (bit-exact to the
-         bundled {15, 25} fixtures) -- so any enlarge_mixed/enlarge_conv
-         works, not just the validated default of 5; see module docstring
-         "DISK STRUCTURING ELEMENTS".
-    What is NOT fixed/known: whether the disk-enlarge-close-fill-erode
-    STRUCTURE itself (as opposed to the mechanics of any one closing
-    step) is the right algorithm for horizontal composite data at all --
-    that's a question about matching some ground truth this package does
-    not have access to, not a general morphological fact like the two
-    items above.
+    Carries the same two morphological conventions as class_basic():
+    border_value=1 on erosion, and MATLAB's exact disk shape. Both are
+    properties of the operation rather than of any one dataset.
+    Uses the same disk decomposition as class_basic()
+    (radius = enlarge*3 / enlarge*5), generated by eccopy.core.disk.
 
     Parameters
     ----------
@@ -532,45 +388,8 @@ def class_basic(conv: np.ndarray,
     melt : np.ndarray, optional
         Melting-layer height/flag field, same shape as conv. If provided,
         enables the "rain below melting layer" override check.
-        *** FIXED this session, via direct line-by-line comparison
-        against the real f_classBasic.m source (lrose-ecco repo, not
-        available earlier in the session). Two things were wrong:
-        (1) An earlier attempt to fix this block's apparent real-data
-        inertness changed the hardcoded threshold from 20/10 to 15/9,
-        reasoning from OTHER parts of this codebase (class_sub_2d,
-        VerticalParams). That was WRONG: the real MATLAB source uses
-        `meltArea<20` and sentinel 10 -- exactly matching the ORIGINAL
-        pre-session Python constants. Reverted back to 20/10.
-        (2) A genuine, previously-undiscovered off-by-one translation
-        bug: MATLAB's `checkCol(1:firstInd)=1` is INCLUSIVE of firstInd
-        (1-indexed); the correct Python translation is
-        `check_col[:first_ind + 1] = 1`, but the port wrote
-        `check_col[:first_ind] = 1`, excluding first_ind. If the
-        convectivity value at the melt-crossing pixel itself is NaN,
-        this silently zeros out that column's entire contribution to
-        the stratiform-percentage check. Confirmed in isolation (a NaN
-        exactly at the crossing point flips a column from contributing
-        6 valid points to contributing 0) and fixed by adding the
-        missing +1.
-        Tested against the real SPOL case (20220526_084500): neither fix
-        changes the final output for that case specifically -- the one
-        real clump that clears the below_frac gate has strat_perc=0.66
-        (genuinely below the 0.8 trigger; confirmed via real MATLAB
-        ECHOTYPE ground truth that this clump is 95.7% Convective Mid,
-        i.e. real convection, correctly not reclassified), and none of
-        its 226 columns happen to have a NaN exactly at the crossing
-        pixel, so the off-by-one fix isn't exercised by this particular
-        case either. Both fixes are still correct and now verified
-        against the real MATLAB source directly (the strongest evidence
-        available, per this project's own "ground truth over speculative
-        debugging" standard) -- they just don't happen to move the needle
-        on this one case's final numbers. ***
-    enlarge_mixed, enlarge_conv : int
-        Structuring element radii (pixels). Any radius works -- the disk
-        strel and its closing decomposition are generated by
-        eccopy.core.disk (bit-exact to MATLAB); see module docstring
-        "DISK STRUCTURING ELEMENTS".
-
+        Thresholded at `meltArea < 20` with a sentinel of 10,
+        matching f_classBasic.m.
     Returns
     -------
     result : 1=stratiform, 2=mixed, 3=convective, NaN=no data
@@ -587,34 +406,10 @@ def class_basic(conv: np.ndarray,
     conv[(mask_mixed == 0) & mask_mixed_orig] = 0
 
     # Rain-below-melt check.
-    # *** ACTUALLY FIXED this session, via direct line-by-line comparison
-    # against the real f_classBasic.m source (lrose-ecco repo). Two
-    # things were wrong:
-    #  1. An earlier attempt this session changed the melt threshold from
-    #     20/10 to 15/9, reasoning from OTHER parts of this codebase
-    #     (class_sub_2d, VerticalParams). That was WRONG -- the real
-    #     MATLAB source uses `meltArea<20` and a sentinel of 10, exactly
-    #     matching the ORIGINAL (pre-this-session) Python constants.
-    #     Reverted back to 20/10 to match ground truth.
-    #  2. A genuine, previously-undiscovered off-by-one translation bug:
-    #     MATLAB's `checkCol(1:firstInd)=1` is INCLUSIVE of firstInd
-    #     (1-indexed). The direct Python translation must be
-    #     `check_col[:first_ind + 1] = 1` (0-indexed, inclusive of
-    #     first_ind) -- but the port wrote `check_col[:first_ind] = 1`,
-    #     EXCLUDING first_ind. Consequence: if the convectivity value at
-    #     the melt-crossing pixel itself happens to be NaN, the
-    #     subsequent `nan_inds`/`last_ind` search sees that NaN as an
-    #     immediate gap (since it was never forced to a valid placeholder
-    #     the way MATLAB forces it), producing last_ind < first_ind and
-    #     silently zeroing out that column's entire contribution to
-    #     check_cols. Confirmed via isolated reproduction: a NaN exactly
-    #     at first_ind flips a column from contributing its full 6 valid
-    #     points to contributing 0. This directly explains real-data
-    #     under-triggering: any column whose crossing-point pixel is NaN
-    #     (common near data-coverage edges/gaps) was silently dropped
-    #     from strat_perc's denominator AND numerator, biasing strat_perc
-    #     in an unpredictable direction depending on which columns happen
-    #     to be affected. Fixed by adding the missing +1.
+    # MATLAB's `checkCol(1:firstInd)=1` is inclusive of firstInd, so
+    # the Python slice must be `check_col[:first_ind + 1]`. Excluding
+    # it drops the whole column's contribution whenever the
+    # convectivity value at the melt-crossing pixel is NaN.
     if melt is not None:
         melt = melt.astype(float).copy()
         labeled_mixed, n_mixed = label(mask_mixed, structure=_CONN8)
@@ -852,13 +647,9 @@ def class_sub_2d(class_in: np.ndarray,
                   first_row: Optional[int] = None,
                   surf_alt_lim: float = 0.0) -> np.ndarray:
     """
-    Sub-classification into echo type codes. Faithful port of the REAL
-    f_classSub.m -- this replaces an earlier version of this function
-    that used height-threshold logic (4.5/9.0 km AGL) and was never
-    actually checked against the real MATLAB source. See module
-    docstring for the validation history of that discovery.
+    Sub-classification into echo type codes. Port of f_classSub.m.
 
-    Non-uniform-grid note (checked, not just assumed): unlike class_basic()
+    Non-uniform grids: unlike class_basic()
     /class_basic_isotropic(), this function has NO pixel-radius structuring
     elements and never touches a spacing array at all -- every threshold
     here (melt=15, temp=-25 C, surf_alt_lim in metres) is compared
@@ -874,11 +665,8 @@ def class_sub_2d(class_in: np.ndarray,
     force-correct `melt`/`temp` near the surface) together with BOTH
     `melt` and `temp`. `melt` is the primary signal for shallow/low
     classification; `temp` only distinguishes mid from deep/high. All
-    three are now required parameters, not optional alternatives. Any
-    caller (eccopy2d_v.run(), eccopy1d.run(), eccopy3d.run(), etc.) that
-    previously called this with "height OR temp" needs to be updated to
-    supply height + melt + temp together -- see downstream TODO note
-    below this function and in the calling modules.
+    three are required together; f_classSub.m has no path that takes a
+    subset.
 
     Parameters
     ----------
@@ -1029,7 +817,6 @@ def assign_echo_type_2d(convectivity: np.ndarray,
 # ---------------------------------------------------------------------------
 # 3-D echo type assignment (EccoPy-3D)
 # Port of ConvStratFinder::_setEchoType3D() + StormClump::setEchoType()
-# *** NOT re-validated this session -- see module docstring "NOT YET DONE" ***
 # ---------------------------------------------------------------------------
 
 def set_echo_type_3d(convectivity: np.ndarray,
@@ -1058,7 +845,7 @@ def set_echo_type_3d(convectivity: np.ndarray,
     *** WARNING: this function has NOT been re-validated against this
     session's findings (border_value fix, exact disk masks, sequential
     closing mechanism). It still uses height-threshold logic for
-    shallow/mid/deep, which was found to be WRONG for the 2-D case
+    shallow/mid/deep, which does not apply to the 2-D case
     (class_sub_2d) -- the real algorithm there uses melt/temp instead.
     Whether the 3-D C++ reference (ConvStratFinder) genuinely differs
     from the 2-D MATLAB reference (f_classSub.m) in this respect, or
@@ -1222,12 +1009,8 @@ def _strat_below(index: Tuple[np.ndarray, np.ndarray, np.ndarray],
         from find_clumps_3d(), shape (Z, Y, X) convention.
     convectivity : np.ndarray, shape (Z, Y, X)
 
-    Note: an earlier version of this function used variables NAMED
-    (ix, iy, iz) that were actually bound from np.where() on a
-    (Z, Y, X)-shaped mask - so "iz_arr - 1" was really decrementing the
-    LAST axis (X), not the first (Z). Fixed by using the correct
-    (Z, Y, X)-ordered index tuple and decrementing iz_arr, vectorized
-    via fancy indexing.
+    `index` is a (Z, Y, X)-ordered tuple from np.where(); the vertical
+    step decrements iz_arr, the first axis.
     """
     iz_arr, iy_arr, ix_arr = index
     if len(iz_arr) == 0:

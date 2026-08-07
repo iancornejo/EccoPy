@@ -143,16 +143,10 @@ def refl_texture_1d_debug(dbz: np.ndarray,
     detrended = block - fitted_line + mean_block
     detrended = np.where(detrended < 1, 1.0, detrended)
 
-    # Sample variance (N-1 denominator) of detrended**2, NaNs dropped --
-    # matches refl_texture_1d's numba core EXACTLY (see that function's
-    # "Sample variance (N-1 denominator)" comment for the validation
-    # history: this was found against real MATLAB output to be N-1, not
-    # N, moving downstream classification agreement from 98.2% to 99.4%).
-    # This debug function previously used np.nanstd(..., ddof=0) --
-    # population variance -- which was NEVER updated when that fix went
-    # into the production core, silently breaking this function's core
-    # promise of matching refl_texture_1d(...)[index] exactly. Caught by
-    # re-running test_debug.py after the fact, not by the fix itself.
+    # Sample variance (N-1 denominator) of detrended**2, NaNs dropped.
+    # Must match refl_texture_1d's Numba core, which uses ddof=1 to
+    # follow MATLAB's std() default. ddof=0 here would silently break
+    # this function's contract of reproducing refl_texture_1d(...)[index].
     finite = detrended[~np.isnan(detrended)] ** 2
     n_valid_pts = finite.size
     if n_valid_pts > 1:

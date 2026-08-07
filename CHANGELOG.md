@@ -145,6 +145,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **Comment and docstring rewrite, part 2 of 3** (`eccopy/core/`).
+  `classification.py` drops from 1244 to 1027 lines and `texture.py` from
+  1426 to 1397, with no functional change; the validation-history and
+  open-item narrative in their module docstrings is replaced by
+  descriptions of the conventions the code actually relies on -
+  `border_value=1` on erosion, `_sequential_close()` over
+  `binary_closing()`, and MATLAB's octagonal disk over a Euclidean one.
 - **Comment and docstring rewrite, part 1 of 3** (the four module
   packages, plus a repository-wide typographic pass). Comments now
   describe what the code does and name the upstream function it

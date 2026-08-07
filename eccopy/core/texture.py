@@ -14,9 +14,9 @@ Two families of functions:
     generalised to accept per-point dy/dx spacing arrays instead of
     assuming a uniform grid.
 
-Both preserve the exact validated math from the original LROSE-derived
-implementations; only the window/spacing resolution has changed to
-support per-point (rather than globally-uniform) spacing.
+Both carry the math of the LROSE-derived implementations unchanged; the
+window/spacing resolution accepts per-point rather than globally uniform
+spacing.
 """
 
 from __future__ import annotations
@@ -94,10 +94,8 @@ def _sliding_texture_core(data_padded: np.ndarray,
 
     Replicates MATLAB f_reflTexture.m exactly at each point:
       - 1-D linear detrend per window
-      - texture = sqrt(sample_std(detrended^2))  (N-1 normalization,
-        matching MATLAB's std() default -- see the fix note at the
-        variance computation below; an earlier version of this function
-        used population (N) normalization, which was WRONG)
+      - texture = sqrt(sample_std(detrended^2)), using N-1 normalisation
+        to match MATLAB's std() default
       - missing values are dropped (nanstd), not substituted
 
     Parameters
@@ -232,40 +230,14 @@ def refl_texture_1d(dbz: np.ndarray,
     Port of MATLAB f_reflTexture.m, generalised to a per-point window
     radius so spacing may vary along the texture axis.
 
-    *** FIXED earlier this session ***: a previous version of this
-    function resolved the window radius from ONLY THE FIRST ROW's
-    spacing, silently applying row 0's window size to every row whenever
-    a genuinely row-varying (ndim > 1) `spacing` array was passed -- e.g.
-    eccopy2d_v.run() called with a truly 2-D coords_x (non-uniform
-    range-gate spacing that changes with elevation angle / Z level). Each
-    row now gets its own radius field resolved from its own spacing when
-    kernel_mode="varying" -- see the row-batching note below for how this
-    is done without touching the validated, Numba-JIT'd core loop.
+    When `kernel_mode="varying"`, each row resolves its own radius from
+    its own spacing, so a genuinely row-varying (ndim > 1) `spacing`
+    array is honoured per row - relevant to eccopy2d_v with a 2-D
+    coords_x whose range-gate spacing changes with elevation angle.
 
-    kernel_mode -- ADDED this session, mirroring refl_texture_2d's
-    kernel_mode parameter, but for a DIFFERENT reason. refl_texture_2d's
-    "uniform" exists because building a real 2-D kernel object at every
-    point is expensive, and matches what validated LROSE ConvStratFinder
-    itself does. Neither reason applies here -- WindowSpec.pixel_radius_
-    field() is one cheap elementwise division, and there is no MATLAB/C++
-    reference for the 1-D family's window resolution to match at all
-    (only class_basic()'s MORPHOLOGY was validated against MATLAB; the
-    per-point radius resolution added afterward has never been checked
-    against ground truth in a case where it does something nontrivial,
-    since SEA/SPOL both used uniform spacing). So "uniform" here exists
-    for a fidelity reason, not a performance one: it collapses to a
-    single representative radius (from the GLOBAL median spacing across
-    the whole array, matching refl_texture_2d's "one kernel for the
-    whole domain" convention) rather than resolving a distinct, never-
-    validated radius at every point. On genuinely uniform-spacing data
-    (SEA/SPOL, and presumably most real single-elevation-angle or
-    constant-sample-rate data) this is IDENTICAL to full per-point
-    resolution, since the median equals the one true spacing value
-    everywhere -- zero behaviour change for already-validated cases.
-    "varying" is the exact post-fix per-point/per-row behaviour described
-    above -- physically the more correct choice for genuine non-uniform
-    spacing, but carries the same "no ground truth for this exact
-    configuration" caveat refl_texture_2d's "varying" mode already does.
+    kernel_mode mirrors refl_texture_2d's parameter of the same name.
+    f_reflTexture.m takes a single scalar `pixRad`, so "uniform" is the
+    default here; "varying" has no upstream counterpart.
 
     Parameters
     ----------
@@ -1311,12 +1283,11 @@ def refl_texture_2d(dbz: np.ndarray,
             f"got dy.shape={dy.shape}, dx.shape={dx.shape}"
         )
 
-    # Null out dbz below min_valid_dbz BEFORE any downstream computation --
-    # exact port of ConvStratFinder::computeEchoType()'s prefiltering loop
-    # ("set dbz field to missing if below the min threshold"), which is
-    # applied ONCE to the whole volume before column-max, fraction_active,
-    # AND per-level texture are computed from it. Previously min_valid_dbz
-    # only gated the fraction_active coverage count -- sub-threshold values
+    # Null out dbz below min_valid_dbz before any downstream computation.
+    # Port of ConvStratFinder::computeEchoType()'s prefiltering loop,
+    # applied once to the whole volume before column-max, fraction_active
+    # and per-level texture are computed from it. Gating only the
+    # fraction_active coverage count would leave sub-threshold values
     # (e.g. -25 dBZ when min_valid_dbz=0) still participated as valid
     # neighbours in the texture plane-fit/variance calc, inflating texture
     # and convectivity near the edges of valid-data regions relative to
