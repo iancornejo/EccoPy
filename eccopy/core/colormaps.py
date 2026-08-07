@@ -163,7 +163,8 @@ def convectivity_norm(vmin: float = 0.0, vmax: float = 1.0) -> Normalize:
 
 
 def draw_window_ring(ax, coords_x, coords_y, radius_km,
-                     center=None, label=True, color="black", alpha=0.9):
+                     center=None, label=True, color="black", alpha=0.9,
+                     coord_units="km"):
     """
     Draw the texture window's footprint as a circle in data coordinates,
     so users can see how large the texture neighbourhood is relative to
@@ -180,10 +181,11 @@ def draw_window_ring(ax, coords_x, coords_y, radius_km,
     Parameters
     ----------
     ax : matplotlib Axes
-        A plan-view axis already drawn with equal aspect and in km.
+        A plan-view axis, in the units named by `coord_units`.
     coords_x, coords_y : np.ndarray
-        The 1-D coordinate axes (km) of the panel, used to place the ring
-        at the domain centre by default.
+        The 1-D coordinate axes of the panel, in the units named by
+        `coord_units`. Used to place the ring at the domain centre by
+        default.
     radius_km : float or None
         Physical window radius in km (``result.texture_radius``). If None,
         non-finite, or <= 0, nothing is drawn and None is returned (so a
@@ -194,14 +196,27 @@ def draw_window_ring(ax, coords_x, coords_y, radius_km,
         Annotate the ring with its radius.
     color, alpha : matplotlib color / float
         Ring styling.
+    coord_units : {"km", "degrees"}
+        Units of `coords_x`/`coords_y` and of the axis. Use "degrees" when
+        the panel is plotted in longitude/latitude, as plan-view 2-D-H
+        output usually is: a circle of fixed physical radius spans more
+        degrees of longitude than of latitude, and more longitude nearer
+        the pole, so the footprint is drawn as an ellipse sized from the
+        ring centre's latitude. Passing degree axes while leaving this at
+        "km" draws a figure that is wrong by a factor of ~100.
 
     Returns
     -------
-    matplotlib.patches.Circle or None
+    matplotlib.patches.Circle, matplotlib.patches.Ellipse, or None
         The patch added to `ax`, or None if nothing was drawn.
     """
     import numpy as _np
-    from matplotlib.patches import Circle as _Circle
+    from matplotlib.patches import Circle as _Circle, Ellipse as _Ellipse
+
+    if coord_units not in ("km", "degrees"):
+        raise ValueError(
+            f"coord_units must be 'km' or 'degrees'; got {coord_units!r}"
+        )
 
     if radius_km is None:
         return None
@@ -220,14 +235,30 @@ def draw_window_ring(ax, coords_x, coords_y, radius_km,
     else:
         cx, cy = float(center[0]), float(center[1])
 
-    ring = _Circle((cx, cy), radius_km, fill=False, ls="--", lw=1.6,
-                   ec=color, alpha=alpha, zorder=5)
+    if coord_units == "km":
+        ring = _Circle((cx, cy), radius_km, fill=False, ls="--", lw=1.6,
+                       ec=color, alpha=alpha, zorder=5)
+        label_dy = radius_km
+    else:
+        # A circle of fixed physical radius is an ellipse in degree space:
+        # a degree of latitude is a constant distance, while a degree of
+        # longitude shrinks as cos(latitude). Uses the same spherical
+        # earth radius as core.coords, so the footprint agrees with the
+        # spacing that latlon_to_xy_spacing() produced.
+        from .coords import EARTH_RADIUS_KM as _R
+        km_per_deg_lat = _np.pi * _R / 180.0
+        km_per_deg_lon = km_per_deg_lat * max(_np.cos(_np.radians(cy)), 1e-6)
+        half_h = radius_km / km_per_deg_lat
+        half_w = radius_km / km_per_deg_lon
+        ring = _Ellipse((cx, cy), 2.0 * half_w, 2.0 * half_h, fill=False,
+                        ls="--", lw=1.6, ec=color, alpha=alpha, zorder=5)
+        label_dy = half_h
     ax.add_patch(ring)
     ax.plot([cx], [cy], marker="+", ms=8, mew=1.4, color=color,
             alpha=alpha, zorder=6)
     if label:
         ax.annotate(f"texture window\nr = {radius_km:.1f} km",
-                    xy=(cx, cy + radius_km), xytext=(0, 5),
+                    xy=(cx, cy + label_dy), xytext=(0, 5),
                     textcoords="offset points", ha="center", va="bottom",
                     fontsize=7, color=color,
                     bbox=dict(boxstyle="round,pad=0.2", fc="white",

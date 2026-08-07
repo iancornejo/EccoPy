@@ -13,6 +13,7 @@ Helper
 eccopy.core.coords.haversine_distance()   — great-circle distance between two points.
 eccopy.core.coords.latlon_to_xy_spacing() — convert lat/lon grid to dx/dy spacing arrays.
 eccopy.core.coords.resolve_spacing()      — convert position arrays to spacing arrays.
+eccopy.core.coords.time_to_distance_km()  — wind-advected distance from a time series.
 
 Quick start
 -----------
@@ -34,10 +35,12 @@ __version__ = "0.1.0"
 
 from . import eccopy1d, eccopy2d_v, eccopy2d_h, eccopy3d
 from . import stats
-from .core.coords import haversine_distance, latlon_to_xy_spacing, resolve_spacing
+from .core.coords import (haversine_distance, latlon_to_xy_spacing,
+                          resolve_spacing, time_to_distance_km)
 
 __all__ = [
     "__version__",
     "eccopy1d", "eccopy2d_v", "eccopy2d_h", "eccopy3d", "stats",
     "haversine_distance", "latlon_to_xy_spacing", "resolve_spacing",
+    "time_to_distance_km",
 ]
