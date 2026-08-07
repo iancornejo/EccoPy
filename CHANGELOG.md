@@ -5,6 +5,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- `conda-recipe/meta.yaml` pinned `setuptools >=68` in its host section
+  while `pyproject.toml`'s build-system requires `>=77` for PEP 639 SPDX
+  license expressions. Because the recipe builds with
+  `--no-build-isolation`, a conda build could resolve a setuptools too old
+  to parse the license field.
+
 ### Added
 - Zenodo DOI badge and citation details in `README.md` and
   `CITATION.cff`. The concept DOI (10.5281/zenodo.21840860) resolves to

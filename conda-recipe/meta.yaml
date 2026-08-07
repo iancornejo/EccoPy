@@ -6,13 +6,16 @@ package:
   version: {{ version }}
 
 source:
-  # Local build/test (from a checkout of this repo):
-  #   conda build conda-recipe/  --with the repo root as the working dir
-  # this picks up the source tree two directories up from this recipe.
+  # Local build/test, from a checkout of this repo with the repo root as
+  # the working directory:
+  #     conda build conda-recipe/
   path: ..
-  # Once published, switch to a PyPI sdist instead, e.g.:
-  # url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  # sha256: <fill in after `python -m build --sdist` + sha256sum dist/eccopy-{{ version }}.tar.gz>
+
+  # For a conda-forge staged-recipes submission, replace the `path` above
+  # with the PyPI sdist. conda-forge does not accept local paths:
+  #
+  #   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  #   sha256: <sha256sum of the sdist as uploaded to PyPI>
 
 build:
   number: 0
@@ -23,7 +26,9 @@ requirements:
   host:
     - python >=3.10
     - pip
-    - setuptools >=68
+    # Must match pyproject's build-system requirement: PEP 639
+    # SPDX license expressions need setuptools >= 77.
+    - setuptools >=77
     - wheel
   run:
     - python >=3.10
