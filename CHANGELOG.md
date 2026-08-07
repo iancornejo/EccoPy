@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-07
+
+First stable release. The public API is now covered by semantic
+versioning: breaking changes require a major version bump.
+
+The entries below cover everything since 0.1.0. In summary: three
+silently-inert parameters were made functional, several dead or duplicated
+ones removed, a stats bug that miscounted every 3-D result was fixed, the
+four plotting modules were dropped in favour of the colormaps users
+actually need, and the documentation, notebooks and examples were rebuilt
+around real bundled data.
+
 ### Added
 - **`eccopy/tests/test_notebooks.py`** — structural checks on the committed
   notebooks: no error outputs, well-formed markdown tables, no cell that
@@ -365,3 +377,4 @@ utilities.
   earlier, on convectivity, by the dual-threshold clumping algorithm).
 
 [0.1.0]: https://github.com/iancornejo/EccoPy/releases/tag/v0.1.0
+[1.0.0]: https://github.com/iancornejo/EccoPy/releases/tag/v1.0.0

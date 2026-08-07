@@ -341,6 +341,12 @@ pip install -e ".[dev,plot]"
 pytest eccopy/tests/
 ```
 
+## Citing EccoPy
+
+`CITATION.cff` in the repository root carries the software citation;
+GitHub renders it as a "Cite this repository" button. Please cite the two
+algorithm papers above alongside it.
+
 ## Acknowledgements
 
 The ECCO algorithm is the work of Michael Dixon and Ulrike Romatschke at
