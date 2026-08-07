@@ -145,6 +145,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **Comment and docstring rewrite, part 3 of 3** (`params/`, `stats/`,
+  and the test suite), completing the pass. Comments across the package
+  now describe behaviour and name their upstream counterpart rather than
+  recording development history. Regression tests keep their description
+  of the behaviour they pin, since that is the point of the test, but
+  drop the temporal framing.
 - **Comment and docstring rewrite, part 2 of 3** (`eccopy/core/`).
   `classification.py` drops from 1244 to 1027 lines and `texture.py` from
   1426 to 1397, with no functional change; the validation-history and

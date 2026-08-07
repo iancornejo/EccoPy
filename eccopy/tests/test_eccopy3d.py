@@ -166,12 +166,11 @@ def test_dual_threshold_clumping_splits_separate_storms():
 
 
 def test_min_valid_dbz_nulls_subthreshold_before_texture():
-    """Real bug (found via SPOL LOW truth comparison, closed a 191,000-
-    pixel Missing-boundary mismatch): min_valid_dbz previously only
-    gated the fraction_active coverage count -- sub-threshold dBZ values
-    still participated as valid neighbours in the texture plane-fit,
-    inflating texture/convectivity near the edges of valid-data regions.
-    Fixed by nulling dbz < min_valid_dbz to NaN before ANY texture
+    """min_valid_dbz must null sub-threshold dBZ before any texture
+    computation, not merely gate the fraction_active coverage count.
+    Leaving them in place lets them act as valid neighbours in the
+    plane fit, inflating texture and convectivity near the edges of
+    valid-data regions. Nulling dbz < min_valid_dbz to NaN before texture
     computation. This test checks that a field with real sub-threshold
     noise gives IDENTICAL output to the same field with that noise
     replaced by NaN outright -- if min_valid_dbz genuinely nulls

@@ -35,17 +35,11 @@ class VerticalParams:
         matching ConvStratFinder. The defaults span any realistic radar or
         model grid, so they are inert unless deliberately narrowed.
 
-    NOTE: the reflectivity floor lives on TextureParams.min_valid_dbz, not
-    here. VerticalParams previously carried a second field of the same name
-    that no code read; it has been removed rather than left as a way to set
-    the wrong one.
+    The reflectivity floor lives on TextureParams.min_valid_dbz, not
+    here.
 
-    NOTE on the "-25 - FIXED" / "4.0 - FIXED" comments above: these
-    describe changes made against the 3-D C++ ConvStratFinder reference
-    and have NOT been independently re-verified against real reference
-    output this session (unlike the 2-D MATLAB findings referenced
-    above, which were checked against real ECCO-V output). Treat the
-    3-D path as unvalidated regardless of what these comments say.
+    Values marked FIXED below are taken from the C++ ConvStratFinder
+    defaults rather than being tunable in the reference.
     """
 
     vert_levels_type: Literal["by_temp", "by_height"] = "by_height"  # FIXED

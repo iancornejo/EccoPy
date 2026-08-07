@@ -4,7 +4,7 @@ levels in the 3-D path.
 
 find_clumps_3d() and set_echo_type_3d() both prefer `height` whenever it is
 supplied, so honouring "by_temp" means withholding height from them. The
-parameter was previously declared but read by no code, making it a silent
+parameter is declared but was read by no code, making it a silent
 no-op.
 """
 import warnings

@@ -1,30 +1,17 @@
-"""Regression tests for class_basic()'s "rain below melting layer"
-correction block -- see core/classification.py's `melt` parameter
-docstring for the full fix history.
+"""Regression tests for class_basic()'s rain-below-melting-layer
+correction block, against f_classBasic.m.
 
-FIXED this session via direct line-by-line comparison against the real
-f_classBasic.m source (lrose-ecco repo):
-  1. An earlier threshold change (20/10 -> 15/9) was reverted -- the real
-     MATLAB source uses meltArea<20 and sentinel 10, matching the
-     ORIGINAL pre-session Python constants. melt is NOT a continuous
-     0-15ish field as assumed from other parts of this codebase; in the
-     real SPOL pipeline it's constructed as a BINARY field (10 or 20)
-     directly from a temperature sign test (TEMP<=0 -> 20, TEMP>0 -> 10;
-     see run_ecco_v_RHI_spol_gridded.m) -- these tests use that same
-     binary convention, not an arbitrary continuous range.
-  2. A genuine off-by-one bug: MATLAB's `checkCol(1:firstInd)=1` is
-     INCLUSIVE of firstInd (1-indexed); the port wrote
-     `check_col[:first_ind] = 1` (excluding first_ind) instead of the
-     correct `check_col[:first_ind + 1] = 1`. A NaN exactly at the
-     melt-crossing pixel could silently zero out a column's entire
-     contribution to the stratiform-percentage check.
+Two properties are pinned here:
 
-Both fixes are verified against the real MATLAB source directly. Tested
-against the real SPOL case (20220526_084500): neither fix changes that
-case's specific output (the one real clump reaching the check is
-genuinely convective per real MATLAB ECHOTYPE ground truth, and none of
-its columns hit the off-by-one edge case) -- these tests use synthetic
-scenarios instead, built to specifically exercise each fix.
+  1. The threshold is `meltArea < 20` with a sentinel of 10. `melt` is
+     not a continuous field: the SPOL pipeline builds it as binary 10 or
+     20 from a temperature sign test (TEMP <= 0 -> 20, TEMP > 0 -> 10;
+     see run_ecco_v_RHI_spol_gridded.m). These tests use that convention.
+
+  2. MATLAB's `checkCol(1:firstInd)=1` is inclusive of firstInd, so the
+     Python slice must be `check_col[:first_ind + 1]`. Excluding it drops
+     a column's entire contribution whenever the convectivity value at
+     the melt-crossing pixel is NaN.
 """
 
 import numpy as np
