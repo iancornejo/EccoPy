@@ -1,5 +1,5 @@
 """
-WindowSpec — physical-unit window sizing for texture calculations.
+WindowSpec - physical-unit window sizing for texture calculations.
 
 Generalised to work against per-point spacing ARRAYS (not just 1D
 coordinate axes), so a window like WindowSpec((5, 'km')) resolves to a

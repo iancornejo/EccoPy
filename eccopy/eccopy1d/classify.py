@@ -1,7 +1,7 @@
 """
 EccoPy-1D public entry point.
 
-Input shape: (T,) or (N,) — one-dimensional array along time or distance.
+Input shape: (T,) or (N,) - one-dimensional array along time or distance.
 Output:      echo_type array of the same shape, with integer codes:
                1 = Stratiform
                2 = Mixed
@@ -57,7 +57,7 @@ Typical usage
     from eccopy.params import WindowSpec
 
     dbz     = np.array([...])        # shape (T,)
-    spacing = np.array([...])        # shape (T,) — time (s) or distance (km)
+    spacing = np.array([...])        # shape (T,) - time (s) or distance (km)
 
     result = eccopy1d.run(dbz, spacing, window=WindowSpec((5, 'km')))
     echo   = result.echo_type        # shape (T,), values in {1, 2, 3}
@@ -96,8 +96,8 @@ class Result1D:
     # Populated ONLY when run(..., return_intermediates=True) is passed;
     # None otherwise (default, zero extra cost). See core.texture's
     # refl_texture_1d_with_fit() docstring for exactly what these are.
-    fitted_dbz:    Optional[np.ndarray] = None   # shape (N,) — local linear-fit value at each point
-    detrended_dbz: Optional[np.ndarray] = None   # shape (N,) — fit removed + re-centred, clipped >= 1
+    fitted_dbz:    Optional[np.ndarray] = None   # shape (N,) - local linear-fit value at each point
+    detrended_dbz: Optional[np.ndarray] = None   # shape (N,) - fit removed + re-centred, clipped >= 1
 
 
 def _resolve_base_spacing(window: Union[WindowSpec, int, None],
@@ -143,15 +143,15 @@ def run(dbz: Union[np.ndarray, list],
         time_to_distance_km() example.
     window : WindowSpec or int
         Texture window half-width.
-          WindowSpec(7)           — fixed 7-pixel radius
-          WindowSpec((5, 'km'))   — 5 km radius (coords must be in km)
-          WindowSpec((3, 'min'))  — 3-minute radius (coords must be in seconds)
+          WindowSpec(7)           - fixed 7-pixel radius
+          WindowSpec((5, 'km'))   - 5 km radius (coords must be in km)
+          WindowSpec((3, 'min'))  - 3-minute radius (coords must be in seconds)
     coord_mode : {'auto', 'position', 'spacing'}
         How to interpret `coords`:
-          'position' — cumulative distance/time at each point; spacing is
+          'position' - cumulative distance/time at each point; spacing is
                        derived as the difference between adjacent values.
-          'spacing'  — already the point-to-point spacing.
-          'auto'     — detect automatically (monotonic → position,
+          'spacing'  - already the point-to-point spacing.
+          'auto'     - detect automatically (monotonic → position,
                        otherwise → spacing).
     texture_params : TextureParams, optional
     class_params : ClassificationParams, optional
@@ -167,7 +167,7 @@ def run(dbz: Union[np.ndarray, list],
         How to resolve the texture window's physical size into a pixel
         radius when `coords` gives non-uniform spacing (e.g. irregular
         sampling gaps in a time series):
-          "uniform" (default) — one radius, resolved from the GLOBAL
+          "uniform" (default) - one radius, resolved from the GLOBAL
               median spacing across the whole track, applied everywhere.
               Identical to "varying" whenever spacing is actually uniform
               (the common case) -- see core.texture.refl_texture_1d's
@@ -175,14 +175,14 @@ def run(dbz: Union[np.ndarray, list],
               (fidelity to the fact that per-point resolution has never
               been checked against ground truth in a case where it does
               something nontrivial, not a performance concern).
-          "varying" — resolve a distinct radius at every point from its
+          "varying" - resolve a distinct radius at every point from its
               own local spacing. Physically more correct for genuinely
               irregular sampling, but unvalidated in that configuration.
     return_intermediates : bool
         If True, also compute and attach `fitted_dbz` and `detrended_dbz`
         to the returned Result1D (the per-point local-linear-fit value
         and the detrended/clipped value that feeds the texture
-        statistic — see core.texture.refl_texture_1d_with_fit()). Costs
+        statistic - see core.texture.refl_texture_1d_with_fit()). Costs
         a little extra Numba compute but no extra passes over the data;
         default False leaves both fields as None.
 
@@ -208,7 +208,7 @@ def run(dbz: Union[np.ndarray, list],
 
     # For WindowSpec with physical units, spacing must be in the same
     # base unit as the window (km→metres, min→seconds internally in
-    # WindowSpec). Pass the spacing array unchanged — WindowSpec stores
+    # WindowSpec). Pass the spacing array unchanged - WindowSpec stores
     # its target size in metres/seconds and the user supplies coords in
     # km or seconds, so we multiply km→m here for length windows.
     spacing_for_window = _resolve_base_spacing(window, spacing)
@@ -237,7 +237,7 @@ def run(dbz: Union[np.ndarray, list],
         upper_lim=tp.texture_limit_high,
     )
 
-    # 3. Basic classification (strat/mixed/conv — no sub-types in 1D)
+    # 3. Basic classification (strat/mixed/conv - no sub-types in 1D)
     # class_basic operates on >=2-D arrays (its morphological structuring
     # elements are 2-D). For genuinely 1-D EccoPy-1D input, treat the
     # array as a single row, run classification, and squeeze back.

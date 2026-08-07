@@ -1,4 +1,4 @@
-"""Classification parameters — defaults match ConvStratFinder constructor,
+"""Classification parameters - defaults match ConvStratFinder constructor,
 except enlarge_mixed/enlarge_conv, which come from a different codebase
 entirely (MATLAB ECCO-V's f_classBasic.m) -- confirmed against that source.
 """
@@ -118,8 +118,8 @@ class ClassificationParams:
     max_convectivity_for_stratiform: float = 0.4
 
     # Volume / extent filters
-    min_valid_volume_for_convective:  float = 20.0   # was 4.0 — FIXED
-    min_vert_extent_for_convective:   float = 1.0    # was 1.5 — FIXED
+    min_valid_volume_for_convective:  float = 20.0   # was 4.0 - FIXED
+    min_vert_extent_for_convective:   float = 1.0    # was 1.5 - FIXED
 
     # Terrain AGL
     min_ht_km_agl_for_mid:  float = 2.0    # new
@@ -134,11 +134,11 @@ class ClassificationParams:
     min_overlap_for_convective_clumps: int  = 1
 
     # Sub-type classification
-    min_conv_fraction_for_deep:             float = 0.05   # was 0.1  — FIXED
-    min_conv_fraction_for_shallow:          float = 0.95   # was 0.1  — FIXED
-    max_shallow_conv_fraction_for_elevated: float = 0.05   # was 0.1  — FIXED
-    max_deep_conv_fraction_for_elevated:    float = 0.25   # was 0.1  — FIXED
-    min_strat_fraction_for_strat_below:     float = 0.9    # was 0.5  — FIXED
+    min_conv_fraction_for_deep:             float = 0.05   # was 0.1  - FIXED
+    min_conv_fraction_for_shallow:          float = 0.95   # was 0.1  - FIXED
+    max_shallow_conv_fraction_for_elevated: float = 0.05   # was 0.1  - FIXED
+    max_deep_conv_fraction_for_elevated:    float = 0.25   # was 0.1  - FIXED
+    min_strat_fraction_for_strat_below:     float = 0.9    # was 0.5  - FIXED
 
     def __post_init__(self):
         """Reject parameter values whose behaviour is not implemented."""

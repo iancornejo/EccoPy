@@ -3,16 +3,16 @@ EccoPy-3D public entry point.
 
 Input shapes:
     dbz     : (Z, Y, X)
-    coords_z: (Z,) or (Z, Y, X)  — vertical positions/spacing (km)
-    coords_y: (Y,) or (Z, Y, X)  — N-S positions/spacing (km)
-    coords_x: (X,) or (Z, Y, X)  — E-W positions/spacing (km)
-    height  : (Z, Y, X), optional — height field, km
-    temp    : (Z, Y, X), optional — temperature field, °C
+    coords_z: (Z,) or (Z, Y, X)  - vertical positions/spacing (km)
+    coords_y: (Y,) or (Z, Y, X)  - N-S positions/spacing (km)
+    coords_x: (X,) or (Z, Y, X)  - E-W positions/spacing (km)
+    height  : (Z, Y, X), optional - height field, km
+    temp    : (Z, Y, X), optional - temperature field, °C
 
 Output echo type codes:
-    Without height/temp — basic clumping only:
+    Without height/temp - basic clumping only:
         1 = Stratiform,  2 = Mixed,  3 = Convective
-    With height or temp — sub-classified:
+    With height or temp - sub-classified:
         14 = Stratiform Low,   16 = Stratiform Mid,  18 = Stratiform High
         25 = Mixed
         32 = Convective Elevated,  34 = Convective Shallow,
@@ -108,7 +108,7 @@ def run(dbz: Union[np.ndarray, list],
     temp : array-like, shape (Z, Y, X) or (Z,), optional
         Temperature field, °C. Used if `height` not provided. Accepts
         either a full (Z, Y, X) field, or a single vertical profile of
-        shape (Z,) — e.g. a sounding — which is broadcast identically
+        shape (Z,) - e.g. a sounding - which is broadcast identically
         across every horizontal point.
     window : WindowSpec or float (km)
         Texture window radius. Must be a length unit.
@@ -117,13 +117,13 @@ def run(dbz: Union[np.ndarray, list],
     kernel_mode : {'uniform', 'varying'}
         How to handle spatially-varying horizontal grid spacing (e.g.
         lat/lon grids, where dx shrinks with cos(latitude)):
-          'uniform' (default) — one representative kernel for the whole
+          'uniform' (default) - one representative kernel for the whole
               grid, built from the median dy/dx at each level. Matches
               what the validated LROSE ConvStratFinder algorithm itself
               does for lat/lon grids (a single dx/dy computed at the
               domain's mean latitude). Fast; becomes approximate for
               domains spanning a wide latitude range.
-          'varying' — rebuilds the kernel from the local spacing at
+          'varying' - rebuilds the kernel from the local spacing at
               every grid point, so the physical kernel size stays
               correct across large/non-uniform domains. This is NOT
               what LROSE does and is unvalidated against LROSE output;

@@ -1,7 +1,7 @@
 """
 Temperature field utilities.
 
-isotherm_height()  — port of Ecco::_computeHts from Ecco.cc
+isotherm_height()  - port of Ecco::_computeHts from Ecco.cc
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ def _isotherm_height_core(temp_3d: np.ndarray,
                           target_temp_c: float) -> np.ndarray:
     """
     JIT-compiled core loop for isotherm_height(). Pure numeric logic
-    only — see isotherm_height()'s docstring for the full explanation
+    only - see isotherm_height()'s docstring for the full explanation
     of what this computes and why it differs from the Ecco.cc reference.
     This function is intentionally a near-literal translation of the
     pure-Python version once was: same variable names, same control
@@ -66,7 +66,7 @@ def _isotherm_height_core(temp_3d: np.ndarray,
                 if crosses:
                     delta_t = t_above - t_below
                     delta_h = z_levels[iz_above] - z_levels[iz_below]
-                    # Anchored at z_levels[iz_below] (the lower level) —
+                    # Anchored at z_levels[iz_below] (the lower level) -
                     # see isotherm_height()'s docstring for why this
                     # differs from the Ecco.cc reference formula.
                     if delta_t == 0:
@@ -103,7 +103,7 @@ def isotherm_height(temp_3d: np.ndarray,
        than only ever comparing immediately adjacent levels. For example,
        given column values [..., 1, NaN, -1, ...] searching for the 0°C
        isotherm, a human can immediately tell the crossing must be very
-       close to the NaN level (we go from +1°C to -1°C across it) — but
+       close to the NaN level (we go from +1°C to -1°C across it) - but
        comparing only adjacent pairs never sees this, because the pair
        (1, NaN) and the pair (NaN, -1) are each skipped individually, and
        the search falls through to the bottom/top fallback instead of
@@ -118,7 +118,7 @@ def isotherm_height(temp_3d: np.ndarray,
 
            interpHt = zProfile[iz] + ((tempC - tempBelow) / deltaTemp) * deltaHt;
 
-       This anchors at zProfile[iz] — the UPPER level of the pair — but
+       This anchors at zProfile[iz] - the UPPER level of the pair - but
        the standard linear-interpolation formula anchors at the LOWER
        level (zProfile[iz-1]). Verified independently three ways
        (symbolic algebra, first-principles re-derivation, and a numeric
@@ -127,7 +127,7 @@ def isotherm_height(temp_3d: np.ndarray,
        mathematically correct answer. This function uses the correct
        (lower-anchored) formula instead. This has NOT been confirmed
        against the live lrose-core GitHub master (only the snapshot
-       provided), so it's possible this was already fixed upstream —
+       provided), so it's possible this was already fixed upstream -
        worth rechecking against current lrose-core source before
        assuming either version is authoritative. If you ever need to
        reproduce Ecco.cc's behaviour bit-for-bit instead of the
@@ -135,7 +135,7 @@ def isotherm_height(temp_3d: np.ndarray,
        `z_levels[iz_above]` in the interpolation line below.
 
     Both corrections only matter when there's a real discrepancy to
-    correct — on a clean, gapless input where the crossing happens to
+    correct - on a clean, gapless input where the crossing happens to
     land close to a level (small deltaHt), the difference from #2 is
     small; it grows with level spacing.
 
@@ -144,7 +144,7 @@ def isotherm_height(temp_3d: np.ndarray,
         directions).
       - Target temp below lowest model level → returns bottom height.
       - Target temp above highest model level → returns top height.
-      - Missing (NaN) temperature values — skipped over when searching for
+      - Missing (NaN) temperature values - skipped over when searching for
         a crossing (see above), not just skipped individually.
 
     Parameters
@@ -202,7 +202,7 @@ def broadcast_temp_field(temp: np.ndarray, target_shape: tuple) -> np.ndarray:
     target shape, or as a single vertical profile (a sounding) to be
     mirrored identically across every horizontal point.
 
-    A sounding gives temperature as a function of height only — one
+    A sounding gives temperature as a function of height only - one
     value per Z level, with no horizontal variation. This lets you pass
     a single representative profile (e.g. from a model sounding or
     reanalysis column) and have it apply uniformly across the whole
@@ -217,7 +217,7 @@ def broadcast_temp_field(temp: np.ndarray, target_shape: tuple) -> np.ndarray:
           - shape (Z,)              → a 1-D sounding, broadcast across all
                                        horizontal points to match target_shape
     target_shape : tuple
-        The full field shape this temperature array should match —
+        The full field shape this temperature array should match -
         (Z, X) for EccoPy-2D-V, (Z, Y, X) for EccoPy-3D.
 
     Returns

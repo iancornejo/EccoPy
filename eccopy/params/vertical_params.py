@@ -1,4 +1,4 @@
-"""Vertical level parameters — defaults match ConvStratFinder constructor."""
+"""Vertical level parameters - defaults match ConvStratFinder constructor."""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -23,9 +23,9 @@ class VerticalParams:
         Default: 'by_height'  (matches C++ VERT_LEVELS_BY_HT default)
 
     shallow_threshold_temp : float   °C   Default:   0.0
-    deep_threshold_temp    : float   °C   Default: -12.0  (was -25 — FIXED)
+    deep_threshold_temp    : float   °C   Default: -12.0  (was -25 - FIXED)
 
-    shallow_threshold_ht   : float   km   Default:  4.5   (was 4.0 — FIXED)
+    shallow_threshold_ht   : float   km   Default:  4.5   (was 4.0 - FIXED)
     deep_threshold_ht      : float   km   Default:  9.0
 
     min_valid_height : float   km   Default:  0.0
@@ -40,7 +40,7 @@ class VerticalParams:
     that no code read; it has been removed rather than left as a way to set
     the wrong one.
 
-    NOTE on the "-25 — FIXED" / "4.0 — FIXED" comments above: these
+    NOTE on the "-25 - FIXED" / "4.0 - FIXED" comments above: these
     describe changes made against the 3-D C++ ConvStratFinder reference
     and have NOT been independently re-verified against real reference
     output this session (unlike the 2-D MATLAB findings referenced
@@ -51,9 +51,9 @@ class VerticalParams:
     vert_levels_type: Literal["by_temp", "by_height"] = "by_height"  # FIXED
 
     shallow_threshold_temp: float = 0.0
-    deep_threshold_temp:    float = -12.0   # was -25.0 — FIXED
+    deep_threshold_temp:    float = -12.0   # was -25.0 - FIXED
 
-    shallow_threshold_ht:   float = 4.5    # was 4.0 — FIXED
+    shallow_threshold_ht:   float = 4.5    # was 4.0 - FIXED
     deep_threshold_ht:      float = 9.0
 
     min_valid_height: float = 0.0

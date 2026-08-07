@@ -1,4 +1,4 @@
-"""Texture calculation parameters — defaults match ConvStratFinder constructor."""
+"""Texture calculation parameters - defaults match ConvStratFinder constructor."""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -17,7 +17,7 @@ class TextureParams:
     upper_lim_dbz : float       Texture value → convectivity=1 (linear). Default: 29.
     dbz_base : float            Subtracted before texture.                 Default: 0.
 
-    2-D radial (EccoPy-3D) — all defaults from ConvStratFinder constructor
+    2-D radial (EccoPy-3D) - all defaults from ConvStratFinder constructor
     -----------------------------------------------------------------------
     texture_radius       : WindowSpec  Circular neighbourhood radius. Default: 7 km.
     min_frac_texture     : float       Min coverage for texture.       Default: 0.25.

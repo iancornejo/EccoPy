@@ -2,9 +2,9 @@
 EccoPy-2D-H (Horizontal single-level / composite) public entry point.
 
 Input shapes:
-    dbz     : (Y, X)         — single horizontal level (e.g. composite)
-    coords_y: (Y,) or (Y, X)  — N-S coordinate or spacing (km)
-    coords_x: (X,) or (Y, X)  — E-W coordinate or spacing (km)
+    dbz     : (Y, X)         - single horizontal level (e.g. composite)
+    coords_y: (Y,) or (Y, X)  - N-S coordinate or spacing (km)
+    coords_x: (X,) or (Y, X)  - E-W coordinate or spacing (km)
 
 No sub-classification into shallow/mid/deep is possible on a single
 horizontal level. Output echo type codes:
@@ -14,25 +14,16 @@ Uses the same 2D radial texture + planar-detrend algorithm as eccopy3d
 (a circular neighbourhood kernel with a best-fit plane removed), as
 validated against LROSE ConvStratFinder output.
 
-Classification engine -- CHANGED this session
-------------------------------------------------
-Classification now runs through the SAME 2-D dual-threshold CLUMPING
-architecture as EccoPy-3D (find_clumps_3d), not the older morphological
-enlarge/close/fill/erode path (class_basic_isotropic). This is a
-deliberate architectural change, not just an addition -- see
-eccopy2d_h/clumping.py's module docstring for exactly what's reused from
-the validated 3-D path (the Stage-2 splitting logic, which is already a
-2-D computation there) versus what's new and unvalidated (area-based
-filtering in place of volume, since a single level has no vertical
-extent to draw a volume from).
+Classification engine
+---------------------
+Classification runs through the same 2-D dual-threshold clumping
+architecture as EccoPy-3D (find_clumps_3d) rather than a morphological
+enlarge/close/fill/erode path. See eccopy2d_h/clumping.py's module
+docstring for what is shared with the 3-D path and where the two differ.
 
-class_basic_isotropic() itself still exists in core/classification.py
-(now with the same border_value/sequential-closing fixes class_basic()
-received) as a simpler, non-clumping alternative -- it is no longer
-called by this module's default path, but nothing stops a caller from
-using it directly against this module's `convectivity` output if the
-clumping-based approach turns out not to be the right fit for a given
-composite dataset.
+core/classification.py's class_basic_isotropic() remains available as a
+simpler, non-clumping alternative. It is not called by this module, but
+can be applied directly to the `convectivity` field this module returns.
 
 Minimum clump area
 --------------------
@@ -124,13 +115,13 @@ def run(dbz: Union[np.ndarray, list],
     kernel_mode : {'uniform', 'varying'}
         How to handle spatially-varying grid spacing (e.g. lat/lon grids,
         where dx shrinks with cos(latitude)):
-          'uniform' (default) — one representative kernel for the whole
+          'uniform' (default) - one representative kernel for the whole
               grid, built from the median dy/dx. Matches what the
               validated LROSE ConvStratFinder algorithm itself does for
               lat/lon grids (it uses a single dx/dy computed at the
               domain's mean latitude). Fast; becomes approximate for
               domains spanning a wide latitude range.
-          'varying' — rebuilds the kernel from the local spacing at
+          'varying' - rebuilds the kernel from the local spacing at
               every grid point, so the physical kernel size stays
               correct across large/non-uniform domains. This is NOT
               what LROSE does and is unvalidated against LROSE output;
@@ -259,7 +250,7 @@ def run(dbz: Union[np.ndarray, list],
         each_subclump_min_area_km2=cp.each_subclump_min_area_km2,
     )
 
-    # 4. Assign echo type codes — basic 1/2/3 only, no sub-typing
+    # 4. Assign echo type codes - basic 1/2/3 only, no sub-typing
     # (see core.classification.assign_echo_type_2d docstring).
     echo = assign_echo_type_2d(
         conv,

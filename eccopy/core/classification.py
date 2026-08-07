@@ -1,9 +1,9 @@
 """
 Basic and sub-classification functions.
 
-class_basic()       — port of f_classBasic.m  (EccoPy-1D / EccoPy-2D)
-class_sub_2d()      — port of f_classSub.m    (EccoPy-1D / EccoPy-2D)
-set_echo_type_3d()  — port of ConvStratFinder::_setEchoType3D() + StormClump
+class_basic()       - port of f_classBasic.m  (EccoPy-1D / EccoPy-2D)
+class_sub_2d()      - port of f_classSub.m    (EccoPy-1D / EccoPy-2D)
+set_echo_type_3d()  - port of ConvStratFinder::_setEchoType3D() + StormClump
 
 Echo type codes (matching MATLAB f_classSub.m and C++ enum values)
 -------------------------------------------------------------------
@@ -1010,13 +1010,13 @@ def assign_echo_type_2d(convectivity: np.ndarray,
     """
     result = np.full(convectivity.shape, np.nan)
 
-    # Pass 1 — clump pixels are Convective, unconditionally (any clump
+    # Pass 1 - clump pixels are Convective, unconditionally (any clump
     # that reached this function already passed find_clumps_2d()'s own
     # area filtering -- see that module for the filtering logic).
     for clump in clumps:
         result[clump['index']] = 3
 
-    # Pass 2 — stratiform/mixed for everything else with valid convectivity
+    # Pass 2 - stratiform/mixed for everything else with valid convectivity
     unassigned = np.isnan(result)
     has_conv = unassigned & ~np.isnan(convectivity)
     mixed_mask = has_conv & (convectivity > max_conv_for_strat)
@@ -1067,7 +1067,7 @@ def set_echo_type_3d(convectivity: np.ndarray,
 
     Exact port of ConvStratFinder::_setEchoType3D() two-pass structure:
 
-    Pass 1: For each clump, call _clump_category() — sets convective pixels.
+    Pass 1: For each clump, call _clump_category() - sets convective pixels.
     Pass 2: Loop all remaining pixels:
               - conv missing or 0 → skip (stays MISSING)
               - conv > max_conv_for_strat → MIXED
@@ -1075,7 +1075,7 @@ def set_echo_type_3d(convectivity: np.ndarray,
                 based on EITHER height_km OR temp (whichever is supplied)
 
     If both height_km and temp are None, every non-clump, non-mixed point
-    with valid convectivity is simply MIXED-or-missing — pass a basic
+    with valid convectivity is simply MIXED-or-missing - pass a basic
     classification mode (CATEGORY_MIXED only, no low/mid/high distinction)
     by leaving both arguments unset; clump pixels are still differentiated
     into shallow/mid/deep/elevated.
@@ -1118,7 +1118,7 @@ def set_echo_type_3d(convectivity: np.ndarray,
     elif use_temp:
         temp = np.asarray(temp, dtype=float)
 
-    # Pass 1 — assign convective pixels via clumps
+    # Pass 1 - assign convective pixels via clumps
     for clump in clumps:
         category = _clump_category(
             clump, min_vol_km3, min_vert_extent_km,
@@ -1129,7 +1129,7 @@ def set_echo_type_3d(convectivity: np.ndarray,
         )
         echo_type[clump['index']] = category
 
-    # Pass 2 — stratiform/mixed for remaining points
+    # Pass 2 - stratiform/mixed for remaining points
     unassigned = (echo_type == CATEGORY_MISSING)
     has_conv = unassigned & ~np.isnan(convectivity) & (convectivity != 0)
 
@@ -1218,13 +1218,13 @@ def _strat_below(index: Tuple[np.ndarray, np.ndarray, np.ndarray],
 
     Parameters
     ----------
-    index : tuple of (iz_arr, iy_arr, ix_arr) — matches clump['index']
+    index : tuple of (iz_arr, iy_arr, ix_arr) - matches clump['index']
         from find_clumps_3d(), shape (Z, Y, X) convention.
     convectivity : np.ndarray, shape (Z, Y, X)
 
     Note: an earlier version of this function used variables NAMED
     (ix, iy, iz) that were actually bound from np.where() on a
-    (Z, Y, X)-shaped mask — so "iz_arr - 1" was really decrementing the
+    (Z, Y, X)-shaped mask - so "iz_arr - 1" was really decrementing the
     LAST axis (X), not the first (Z). Fixed by using the correct
     (Z, Y, X)-ordered index tuple and decrementing iz_arr, vectorized
     via fancy indexing.

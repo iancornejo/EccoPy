@@ -1,4 +1,4 @@
-"""Tests for eccopy.core.texture — refl_texture_2d kernel_mode handling."""
+"""Tests for eccopy.core.texture - refl_texture_2d kernel_mode handling."""
 
 import numpy as np
 import pytest

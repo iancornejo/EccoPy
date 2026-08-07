@@ -1,4 +1,4 @@
-"""Tests for eccopy2d_v.run() — array-based 2-D vertical cross-section."""
+"""Tests for eccopy2d_v.run() - array-based 2-D vertical cross-section."""
 
 import numpy as np
 import pytest

@@ -145,6 +145,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **Comment and docstring rewrite, part 1 of 3** (the four module
+  packages, plus a repository-wide typographic pass). Comments now
+  describe what the code does and name the upstream function it
+  corresponds to, rather than recording the history of how it came to be
+  written. Each module header lists its upstream analogues once, with the
+  source commit pinned (`lrose-ecco @ ad85c56`, `lrose-core @ b29264bf`),
+  so individual references stay short and do not go stale. Em- and
+  en-dashes are normalised to ASCII hyphens throughout (176 occurrences).
+  No functional change; all tests pass unmodified.
 - **`VerticalParams.min_valid_height` / `max_valid_height` are now
   implemented.** Both were declared but read by no code. Levels whose
   height falls outside the band are treated as missing *before* texture is

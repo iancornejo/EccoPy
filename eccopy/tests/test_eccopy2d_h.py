@@ -1,4 +1,4 @@
-"""Tests for eccopy2d_h.run() — array-based 2-D horizontal/composite."""
+"""Tests for eccopy2d_h.run() - array-based 2-D horizontal/composite."""
 
 import numpy as np
 import pytest

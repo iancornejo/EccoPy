@@ -4,7 +4,7 @@ reference implementations.
 
 These reference implementations (in eccopy/tests/_reference_impls/) are
 DELIBERATELY FROZEN COPIES of what the production code looked like before
-each Numba conversion — not re-derivations, not simplifications. The goal
+each Numba conversion - not re-derivations, not simplifications. The goal
 is to catch any discrepancy introduced during conversion, the same way
 exhaustive cross-validation against production caught real bugs while
 building the debug module (see test_debug.py).
@@ -12,7 +12,7 @@ building the debug module (see test_debug.py).
 NUMERICAL NOTE on near-zero-variance cases (see test_sliding_texture_
 core_matches_reference below): the underlying texture formula uses a
 numerically unstable one-pass variance calculation (E[X^2] - E[X]^2),
-inherited from the original algorithm — present in BOTH the reference
+inherited from the original algorithm - present in BOTH the reference
 and the Numba version, not introduced by the conversion. When the true
 variance is extremely small (detrended values that are nearly but not
 exactly identical), floating-point rounding differences between the
@@ -21,7 +21,7 @@ cause the catastrophic-cancellation error to come out differently in
 each, producing visibly different "noise floor" texture values (e.g.
 1e-7 vs 1e-3) even though both are physically meaningless relative to
 the function's actual 0-30 dB operating range. Comparisons below use a
-tolerance (atol=0.01) that reflects this — tight enough to catch any
+tolerance (atol=0.01) that reflects this - tight enough to catch any
 real algorithmic divergence, loose enough not to flag two numerically-
 negligible-but-differently-rounded near-zero results as a bug.
 """

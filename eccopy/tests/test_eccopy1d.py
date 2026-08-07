@@ -1,4 +1,4 @@
-"""Tests for eccopy1d.run() — array-based 1-D classification."""
+"""Tests for eccopy1d.run() - array-based 1-D classification."""
 
 import numpy as np
 import pytest
@@ -29,7 +29,7 @@ def test_basic_classes_present():
     dbz, x_km = _synthetic_profile()
     r = eccopy1d.run(dbz, coords=x_km, window=WindowSpec((5, "km")))
     codes = set(np.unique(r.echo_type[~np.isnan(r.echo_type)]).astype(int))
-    # Only basic codes are possible for 1-D — no sub-classification
+    # Only basic codes are possible for 1-D - no sub-classification
     assert codes.issubset({1, 2, 3})
     assert 1 in codes  # smooth background should be stratiform
     assert 3 in codes  # embedded spike should be convective

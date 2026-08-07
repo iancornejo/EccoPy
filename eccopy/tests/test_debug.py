@@ -1,12 +1,12 @@
 """
-Tests for eccopy.core.debug — the introspection/debug functions must
+Tests for eccopy.core.debug - the introspection/debug functions must
 exactly reproduce the production texture functions' output at every
 point, including edge cases (NaN gaps, array borders, varying spacing).
 
 These tests intentionally stress several tricky agreement points that
 were bugs during development:
   - the center point itself being NaN (must report texture=NaN, but a
-    correctly-computed fraction_active — these are two separate checks
+    correctly-computed fraction_active - these are two separate checks
     in production, not one)
   - points within the border excluded by production's kernel half-width
     (must report texture=NaN AND fraction_active=0.0, matching

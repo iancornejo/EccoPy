@@ -67,7 +67,7 @@ def remap_echo_type(echo_type: np.ndarray) -> np.ndarray:
     """
     Remap echo-type integer codes to 1-based plot indices.
 
-    Auto-detects whether `echo_type` contains basic codes (1, 2, 3 — no
+    Auto-detects whether `echo_type` contains basic codes (1, 2, 3 - no
     sub-classification, from eccopy1d / eccopy2d_h / eccopy2d_v|eccopy3d
     without height or temp) or sub-classified codes (14, 16, 18, 25, 30,
     32, 34, 36, 38), and remaps using the matching table. Use
@@ -85,7 +85,7 @@ def remap_echo_type(echo_type: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Convectivity colormap — continuous, 0-1
+# Convectivity colormap - continuous, 0-1
 # ---------------------------------------------------------------------------
 #
 # Shares hue language with the classification colormaps above (blue for
