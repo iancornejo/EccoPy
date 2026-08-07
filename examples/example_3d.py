@@ -1,145 +1,222 @@
+#!/usr/bin/env python3
 """
-EccoPy-3D example workflow.
+EccoPy-3D worked example: full volumes.
 
-Use case: a full 3-D Cartesian reflectivity volume, shape (Z, Y, X)
-(e.g. a gridded radar volume, a model output volume).
+Runs the full texture -> convectivity -> clumping -> classification chain
+on the bundled WRF volume. This is the script form of
+notebooks/eccopy3d_workflow.ipynb.
 
-This example shows:
-  A. Basic only (no height/temp)
-  B. With a height field (full sub-classification)
-  C. Tuning the clumping volume threshold
-  D. Working from a lat/lon grid instead of native x/y
+Run from anywhere in a checkout:
 
-Replace the "YOUR DATA" section with real arrays.
+    python examples/example_3d.py
+    python examples/example_3d.py --outdir figs       # also save a figure
+
+Needs the sample data under notebooks/data/, which ships with the
+repository but not with the installed wheel. Reading it needs netCDF4:
+
+    pip install -e ".[dev,plot]" netCDF4
 """
-# Run with:  python3 examples/example_3d.py
-# (from the eccopy_pkg/ directory, or after `pip install -e .`)
+from __future__ import annotations
+
+import argparse
+import warnings
+from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
-from eccopy import eccopy3d
-from eccopy.params import WindowSpec, ClassificationParams, VerticalParams
+
+from eccopy import eccopy3d, stats
+from eccopy.params import (ClassificationParams, TextureParams, VerticalParams,
+                           WindowSpec)
+
+DATA = Path(__file__).resolve().parent.parent / "notebooks" / "data"
+CLASSES = [14, 16, 18, 25, 30, 32, 34, 36, 38]
 
 
-# ---------------------------------------------------------------------
-# YOUR DATA — replace this block with real arrays
-# ---------------------------------------------------------------------
-# dbz: reflectivity, shape (Z, Y, X), dBZ, NaN where missing
-# coords_z: vertical coordinate, shape (Z,) -- km
-# coords_y: N-S coordinate, shape (Y,) -- km
-# coords_x: E-W coordinate, shape (X,) -- km
-# height (optional): shape (Z, Y, X) -- km
-# temp (optional): shape (Z, Y, X) -- deg C
-np.random.seed(3)
-nz, ny, nx = 12, 40, 50
-coords_z = np.linspace(0.5, 11.5, nz)
-coords_y = np.linspace(-20, 20, ny)
-coords_x = np.linspace(-25, 25, nx)
+def load():
+    """Read the volume. `height` ships as a 1-D profile; broadcast it."""
+    import netCDF4 as nc
 
-dbz = 15 - 0.8 * coords_z[:, None, None] + np.random.normal(0, 0.7, (nz, ny, nx))
-# A large, deep storm cell
-for iz in range(nz):
-    weight = np.exp(-((iz - 4) ** 2) / 14)
-    dbz[iz, 15:25, 20:32] += 32 * weight
-# Two small, sharp, shallow cells -- intense enough to register as their
-# own clumps, but small enough in volume to be filtered out by a
-# strict min_valid_volume_for_convective (see part C below)
-for iz in range(2):
-    dbz[iz, 5:7, 5:7] += 35
-    dbz[iz, 32:34, 38:40] += 35
+    ds = nc.Dataset(DATA / "wrf_volume_20220526.nc")
+    fill = lambda name: np.ma.filled(ds.variables[name][:].astype(float), np.nan)
 
-height = np.broadcast_to(coords_z[:, None, None], dbz.shape).copy()
-# ---------------------------------------------------------------------
+    z_km = fill("z")          # (Z,)  nominal height
+    y_km = fill("y")          # (Y,)
+    x_km = fill("x")          # (X,)
+    dbz = fill("dbz")         # (Z, Y, X)
+    temp = fill("Temp")       # (Z, Y, X)
 
-window = WindowSpec((5, "km"))
+    # Geopotential height varies horizontally by only 12-20 m, so it ships
+    # as a profile. It is NOT interchangeable with the nominal z
+    # coordinate: the two drift apart by up to 0.5 km aloft.
+    height = np.broadcast_to(fill("height")[:, None, None], dbz.shape).copy()
+    return z_km, y_km, x_km, dbz, temp, height
 
-print("=" * 60)
-print("A. BASIC MODE (no height, no temp)")
-print("=" * 60)
-result_basic = eccopy3d.run(
-    dbz, coords_z=coords_z, coords_y=coords_y, coords_x=coords_x,
-    window=window,
-)
-print(f"n_clumps: {result_basic.n_clumps}")
-print(f"codes: {np.unique(result_basic.echo_type[result_basic.echo_type > 0])}")
-# Note: in basic mode, convective sub-type (here likely 36=ConvMid)
-# is a FALLBACK, not a measurement -- it cannot distinguish
-# shallow/mid/deep/elevated without height or temp. Only the
-# clump/no-clump distinction (and mixed vs convective) is meaningful.
 
-print()
-print("=" * 60)
-print("B. WITH HEIGHT (full sub-classification)")
-print("=" * 60)
-vert_params = VerticalParams(shallow_threshold_ht=4.5, deep_threshold_ht=9.0)
-result_height = eccopy3d.run(
-    dbz, coords_z=coords_z, coords_y=coords_y, coords_x=coords_x,
-    height=height, window=window, vert_params=vert_params,
-)
-codes = np.unique(result_height.echo_type[result_height.echo_type > 0])
-label = {14: "StratLow", 16: "StratMid", 18: "StratHigh", 25: "Mixed",
-         32: "ConvElevated", 34: "ConvShallow", 36: "ConvMid", 38: "ConvDeep"}
-print(f"n_clumps: {result_height.n_clumps}")
-print(f"codes: {codes} -> {[label[int(c)] for c in codes]}")
+def main(outdir: Path | None) -> None:
+    z_km, y_km, x_km, dbz, temp, height = load()
+    print(f"input {dbz.shape}: {np.isfinite(dbz).mean():.1%} valid, "
+          f"{np.nanmin(dbz):.1f} to {np.nanmax(dbz):.1f} dBZ")
 
-print()
-print("=" * 60)
-print("C. TUNING THE CLUMPING VOLUME THRESHOLD")
-print("=" * 60)
-# min_valid_volume_for_convective: minimum 3-D volume (km^3) a clump
-# must have to be classified as convective rather than falling back to
-# Mixed. Default is 20.0; the validated SPOL Taiwan reference case used
-# 30.0 -- there is no universal "correct" value, it depends on your
-# radar/model resolution and what you want to call "convective".
-cp_loose = ClassificationParams(min_valid_volume_for_convective=1.0)
-cp_default = ClassificationParams()  # default: 20.0 km^3
-cp_strict = ClassificationParams(min_valid_volume_for_convective=100.0)
+    # ------------------------------------------------------------------
+    # Parameters. Every value below is the package default.
+    # ------------------------------------------------------------------
+    window = WindowSpec((7, "km"))     # radius of the 2-D radial kernel,
+                                       # applied within each level
 
-result_loose = eccopy3d.run(
-    dbz, coords_z=coords_z, coords_y=coords_y, coords_x=coords_x,
-    window=window, class_params=cp_loose,
-)
-result_default = eccopy3d.run(
-    dbz, coords_z=coords_z, coords_y=coords_y, coords_x=coords_x,
-    window=window, class_params=cp_default,
-)
-result_strict = eccopy3d.run(
-    dbz, coords_z=coords_z, coords_y=coords_y, coords_x=coords_x,
-    window=window, class_params=cp_strict,
-)
-print(f"loose   (1 km^3 min):   n_clumps={result_loose.n_clumps}")
-print(f"default (20 km^3 min):  n_clumps={result_default.n_clumps}")
-print(f"strict  (100 km^3 min): n_clumps={result_strict.n_clumps}")
-print("(the two small, sharp cells get filtered out as the threshold rises,")
-print(" leaving only the large storm; this is exactly what the volume filter")
-print(" is for -- ignoring small, intense, but probably noise-driven blips)")
-
-# result.echo_type        -> (Z, Y, X) int array
-# result.convectivity     -> (Z, Y, X) float, 0-1
-# result.texture           -> (Z, Y, X) float, dB
-# result.fraction_active  -> (Y, X) float, 0-1 (per-level kernel coverage)
-# result.n_clumps          -> int, number of convective clumps found
-
-print()
-print("=" * 60)
-print("D. WORKING FROM A LAT/LON GRID (commented template)")
-print("=" * 60)
-print("""
-If your data is on a lat/lon grid rather than native x/y:
-
-    from eccopy import latlon_to_xy_spacing
-
-    # lat, lon: shape (Y, X) -- a single representative horizontal slice
-    # is enough; spacing doesn't usually vary with height.
-    dy_km, dx_km = latlon_to_xy_spacing(lat, lon)
-
-    result = eccopy3d.run(
-        dbz, coords_z=z_km,           # vertical axis is usually still a
-                                        # plain 1-D km array
-        coords_y=dy_km, coords_x=dx_km,
-        coord_mode="spacing",          # these are now deltas, not positions
-        height=height,
-        window=WindowSpec((7, "km")),
-        kernel_mode="varying",         # recommended for grids spanning a
-                                         # wide latitude range -- see README
+    texture_params = TextureParams(
+        dbz_base=0.0,
+        texture_limit_low=0.0,         # sub-low texture -> missing
+        texture_limit_high=30.0,       # the normaliser
+        min_valid_dbz=None,            # None -> 0.0 here (ConvStratFinder)
+        min_frac_texture=0.25,
+        min_frac_fit=0.67,
+        use_dbz_col_max=False,         # True computes texture once from
+                                       # column-max dBZ, copied to all levels
+        dbz_for_echo_tops=18.0,        # threshold defining echo_top_km
     )
-""")
+
+    class_params = ClassificationParams(
+        # thresholds
+        max_convectivity_for_stratiform=0.4,
+        min_convectivity_for_convective=0.5,
+        # clump identification and splitting
+        use_dual_thresholds=True,
+        secondary_convectivity=0.65,
+        all_subclumps_min_area_frac=0.33,
+        each_subclump_min_area_frac=0.02,
+        each_subclump_min_area_km2=2.0,   # a pseudo-VOLUME in 3-D
+        min_valid_volume_for_convective=20.0,
+        min_vert_extent_for_convective=1.0,
+        # clump sub-typing
+        min_conv_fraction_for_deep=0.05,
+        min_conv_fraction_for_shallow=0.95,
+        max_shallow_conv_fraction_for_elevated=0.05,
+        max_deep_conv_fraction_for_elevated=0.25,
+        min_strat_fraction_for_strat_below=0.9,
+        # only active when terrain_ht is supplied
+        min_ht_km_agl_for_mid=2.0,
+        min_ht_km_agl_for_deep=4.0,
+    )
+
+    vert_params = VerticalParams(
+        vert_levels_type="by_height",  # or "by_temp" for the temperature pair
+        shallow_threshold_ht=4.5,      # km
+        deep_threshold_ht=9.0,         # km
+        shallow_threshold_temp=0.0,    # degC, used when by_temp
+        deep_threshold_temp=-12.0,     # degC
+        min_valid_height=0.0,          # analysis band; inert at these
+        max_valid_height=25.0,         # defaults on any realistic grid
+    )
+
+    # ------------------------------------------------------------------
+    result = eccopy3d.run(
+        dbz,
+        coords_z=z_km,
+        coords_y=y_km,
+        coords_x=x_km,
+        height=height,
+        temp=temp,
+        terrain_ht=None,               # raises the shallow/deep boundaries
+        window=window,
+        texture_params=texture_params,
+        class_params=class_params,
+        vert_params=vert_params,
+        kernel_mode="uniform",
+        n_threads=1,
+    )
+
+    print(f"\nclumps found   {result.n_clumps}")
+    print(f"texture radius {result.texture_radius:.1f} km")
+    print(f"echo_type dtype {result.echo_type.dtype} "
+          f"(int16, 0 = no echo - np.isfinite() is the WRONG mask test here)")
+
+    classified = np.isin(result.echo_type, CLASSES)
+    print(f"classified voxels {classified.sum():,} of {result.echo_type.size:,}")
+    if result.echo_top_km is not None:
+        print(f"echo top (>= {texture_params.dbz_for_echo_tops:.0f} dBZ): "
+              f"mean {np.nanmean(result.echo_top_km):.1f} km, "
+              f"max {np.nanmax(result.echo_top_km):.1f} km")
+
+    # ------------------------------------------------------------------
+    print("\nclassification")
+    fractions = stats.echo_type_fractions(result.echo_type)
+    for name in ("stratiform", "mixed", "convective"):
+        print(f"    {name:12s} {fractions[name]:6.1%}")
+    codes, counts = np.unique(result.echo_type[classified], return_counts=True)
+    print("  by code: " + "  ".join(f"{int(c)}:{n / counts.sum():.1%}"
+                                    for c, n in zip(codes, counts)))
+
+    top = stats.convective_top_height(result.echo_type, height, axis=0)
+    print(f"  convective top: mean {np.nanmean(top):.1f} km, "
+          f"max {np.nanmax(top):.1f} km")
+
+    # Sub-typing keys off the height/temperature boundaries. Switching to
+    # temperature warns that the supplied height is not used for that.
+    print("\nvert_levels_type")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        by_temp = eccopy3d.run(
+            dbz, coords_z=z_km, coords_y=y_km, coords_x=x_km, height=height,
+            temp=temp, window=window, texture_params=texture_params,
+            class_params=class_params,
+            vert_params=replace(vert_params, vert_levels_type="by_temp"))
+        for w in caught:
+            print(f"  warning: {str(w.message).splitlines()[0]}")
+    for label, echo in (("by_height", result.echo_type),
+                        ("by_temp", by_temp.echo_type)):
+        present = sorted(int(c) for c in np.unique(echo[np.isin(echo, CLASSES)]))
+        print(f"  {label:9s} codes {present}")
+
+    if outdir is not None:
+        plot(outdir, z_km, y_km, x_km, dbz, result)
+
+
+def plot(outdir, z_km, y_km, x_km, dbz, result):
+    """Column-max reflectivity and a vertical slice of the classification."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from eccopy.core.colormaps import (ECHO_TYPE_LABELS, echo_type_cmap,
+                                       echo_type_norm, remap_echo_type)
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    col_max = np.nanmax(dbz, axis=0)
+    iy = int(np.unravel_index(np.nanargmax(col_max), col_max.shape)[0])
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.2), width_ratios=[1, 1.15])
+
+    m = axes[0].pcolormesh(x_km, y_km, col_max, cmap="turbo", vmin=-10, vmax=65,
+                           shading="nearest")
+    axes[0].axhline(y_km[iy], color="k", lw=1.0, ls="--")
+    axes[0].set_xlabel("x (km)")
+    axes[0].set_ylabel("y (km)")
+    axes[0].set_aspect("equal")
+    axes[0].set_title("Column-max reflectivity", fontsize=10)
+    fig.colorbar(m, ax=axes[0], pad=0.01, label="dBZ")
+
+    # int16 with a 0 sentinel: convert to float/NaN before remapping.
+    slice_et = result.echo_type[:, iy, :].astype(float)
+    slice_et[slice_et == 0] = np.nan
+    m = axes[1].pcolormesh(x_km, z_km, remap_echo_type(slice_et),
+                           cmap=echo_type_cmap(), norm=echo_type_norm(),
+                           shading="nearest")
+    axes[1].set_xlabel("x (km)")
+    axes[1].set_ylabel("height (km)")
+    axes[1].set_title(f"Echo type at y = {y_km[iy]:.0f} km", fontsize=10)
+    cb = fig.colorbar(m, ax=axes[1], ticks=range(1, 10), pad=0.01)
+    cb.ax.set_yticklabels(ECHO_TYPE_LABELS)
+
+    plt.tight_layout()
+    path = outdir / "example_3d.png"
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    print(f"\nwrote {path}")
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    ap.add_argument("--outdir", type=Path, default=None,
+                    help="write a figure here (needs matplotlib)")
+    main(ap.parse_args().outdir)

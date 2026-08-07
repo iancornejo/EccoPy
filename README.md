@@ -307,6 +307,16 @@ walk the full chain, show every intermediate array, document the parameters
 that module consumes, and end with a helper for sweeping parameters on your
 own data.
 
+## Example scripts
+
+`examples/` holds the same four walkthroughs as runnable scripts, for
+anyone who would rather not use Jupyter:
+
+```bash
+python examples/example_2d_v.py                # print results
+python examples/example_2d_v.py --outdir figs  # also save a figure
+```
+
 ## Statistics
 
 `eccopy.stats` works on any classified array:

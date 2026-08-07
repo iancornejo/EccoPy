@@ -1,80 +1,193 @@
+#!/usr/bin/env python3
 """
-EccoPy-2D-H example workflow.
+EccoPy-2D-H worked example: horizontal composites.
 
-Use case: a single horizontal level or composite (e.g. column-max
-reflectivity composite, a CAPPI, a single PPI sweep regridded to
-Cartesian), shape (Y, X).
+Runs the full texture -> convectivity -> classification chain on the
+bundled MRMS composite. This is the script form of
+notebooks/eccopy2d_h_workflow.ipynb.
 
-Only basic classification (Stratiform / Mixed / Convective) is possible
-here -- there's no vertical axis to determine cloud depth from, so
-eccopy2d_h.run() has no height/temp parameters at all.
+Run from anywhere in a checkout:
 
-This example also shows the `kernel_mode` option, relevant if your grid
-spacing is non-uniform (e.g. a lat/lon grid).
+    python examples/example_2d_h.py
+    python examples/example_2d_h.py --outdir figs     # also save a figure
 
-Replace the "YOUR DATA" section with real arrays.
+Needs the sample data under notebooks/data/, which ships with the
+repository but not with the installed wheel. Reading it needs netCDF4:
+
+    pip install -e ".[dev,plot]" netCDF4
 """
-# Run with:  python3 examples/example_2d_h.py
-# (from the eccopy_pkg/ directory, or after `pip install -e .`)
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
 
 import numpy as np
-from eccopy import eccopy2d_h
-from eccopy.params import WindowSpec
+
+from eccopy import eccopy2d_h, stats
+from eccopy.core.coords import latlon_to_xy_spacing
+from eccopy.params import ClassificationParams, TextureParams, WindowSpec
+
+DATA = Path(__file__).resolve().parent.parent / "notebooks" / "data"
 
 
-# ---------------------------------------------------------------------
-# YOUR DATA — replace this block with real arrays
-# ---------------------------------------------------------------------
-# dbz: reflectivity, shape (Y, X), dBZ, NaN where missing
-# coords_y: N-S coordinate, shape (Y,) -- km
-# coords_x: E-W coordinate, shape (X,) -- km
-np.random.seed(2)
-ny, nx = 60, 80
-coords_y = np.linspace(-30, 30, ny)
-coords_x = np.linspace(-40, 40, nx)
+def load():
+    """Read the composite and convert its lat/lon mesh to physical spacing."""
+    import netCDF4 as nc
 
-dbz = 15 + np.random.normal(0, 0.5, (ny, nx))
-yy, xx = np.meshgrid(coords_y, coords_x, indexing="ij")
-dbz += 30 * np.exp(-((yy - 5) ** 2 + (xx - 10) ** 2) / 30)   # one storm cell
-# ---------------------------------------------------------------------
+    ds = nc.Dataset(DATA / "mrms_composite_20211215.nc")
+    fill = lambda name: np.ma.filled(ds.variables[name][:].astype(float), np.nan)
 
-window = WindowSpec((7, "km"))
+    lat = fill("latitude")
+    lon = fill("longitude")
+    dbz = fill("MergedReflectivityQCComposite")
 
-result = eccopy2d_h.run(
-    dbz, coords_y=coords_y, coords_x=coords_x,
-    window=window,
-    kernel_mode="uniform",   # use "varying" for wide-latitude-range lat/lon grids
-)
+    # EccoPy works in physical distance, not degrees. latlon_to_xy_spacing
+    # takes 2-D latitude and longitude FIELDS, so build a meshgrid first.
+    LAT, LON = np.meshgrid(lat, lon, indexing="ij")
+    dy_km, dx_km = latlon_to_xy_spacing(LAT, LON)
+    return lat, lon, dbz, dy_km, dx_km
 
-print("codes:", np.unique(result.echo_type[~np.isnan(result.echo_type)]))
-# -> only {1, 2, 3}: Stratiform / Mixed / Convective
 
-# result.echo_type        -> (Y, X) int array
-# result.convectivity     -> (Y, X) float, 0-1
-# result.texture           -> (Y, X) float, dB
-# result.fraction_active  -> (Y, X) float, 0-1: kernel coverage fraction
-#                            (useful for spotting low-confidence regions
-#                            near the edge of radar coverage)
+def main(outdir: Path | None) -> None:
+    lat, lon, dbz, dy_km, dx_km = load()
+    print(f"input {dbz.shape}: {np.isfinite(dbz).mean():.1%} carries echo, "
+          f"max {np.nanmax(dbz):.1f} dBZ")
+    print(f"domain {lat.min():.1f}-{lat.max():.1f} N, "
+          f"{lon.min():.1f}-{lon.max():.1f} E")
+    print(f"dx varies {dx_km.min():.3f}-{dx_km.max():.3f} km "
+          f"({100 * (dx_km.max() / dx_km.min() - 1):.1f}% across the domain); "
+          f"dy constant at {dy_km.mean():.3f} km")
 
-iy = int(np.argmin(np.abs(coords_y - 5)))
-ix = int(np.argmin(np.abs(coords_x - 10)))
-print(f"At the storm cell ({coords_y[iy]:.0f}, {coords_x[ix]:.0f} km): "
-      f"echo_type={result.echo_type[iy, ix]:.0f}, "
-      f"convectivity={result.convectivity[iy, ix]:.3f}")
+    # ------------------------------------------------------------------
+    # Parameters. Every value below is the package default.
+    # ------------------------------------------------------------------
+    window = WindowSpec((7, "km"))     # radius of the 2-D radial kernel
 
-# ---------------------------------------------------------------------
-# WORKING WITH LAT/LON INSTEAD OF A NATIVE X/Y GRID
-# ---------------------------------------------------------------------
-# If your data is on a lat/lon grid rather than a projected x/y grid,
-# convert it to local km spacing first using the haversine helper, then
-# pass coord_mode="spacing" (since these are now point-to-point deltas,
-# not coordinate positions):
-#
-#   from eccopy import latlon_to_xy_spacing
-#   dy_km, dx_km = latlon_to_xy_spacing(lat, lon)   # lat, lon: (Y, X) arrays
-#   result = eccopy2d_h.run(
-#       dbz, coords_y=dy_km, coords_x=dx_km, coord_mode="spacing",
-#       window=WindowSpec((7, "km")),
-#       kernel_mode="varying",   # recommended for lat/lon grids spanning
-#                                 # a wide latitude range -- see README
-#   )
+    texture_params = TextureParams(
+        dbz_base=0.0,                  # subtracted before the statistic
+        texture_limit_low=0.0,         # sub-low texture -> missing
+        texture_limit_high=30.0,       # the normaliser
+        min_valid_dbz=None,            # None -> 0.0 here (ConvStratFinder)
+        min_frac_texture=0.25,         # kernel coverage to compute texture
+        min_frac_fit=0.67,             # kernel coverage to fit the plane
+    )
+
+    class_params = ClassificationParams(
+        max_convectivity_for_stratiform=0.4,   # below -> stratiform
+        min_convectivity_for_convective=0.5,   # at/above -> convective
+        use_dual_thresholds=True,      # split merged cells
+        secondary_convectivity=0.65,   # inner threshold used for the split
+        all_subclumps_min_area_frac=0.33,
+        each_subclump_min_area_frac=0.02,
+        each_subclump_min_area_km2=2.0,  # a true AREA here; a pseudo-volume
+                                         # in eccopy3d - do not share one
+                                         # ClassificationParams between them
+    )
+
+    # ------------------------------------------------------------------
+    result = eccopy2d_h.run(
+        dbz,
+        coords_y=dy_km,
+        coords_x=dx_km,
+        coord_mode="spacing",          # these are cell sizes, not positions
+        window=window,
+        texture_params=texture_params,
+        class_params=class_params,
+        kernel_mode="uniform",
+        min_convective_area=None,      # km^2 floor on finished clumps
+    )
+
+    print(f"\nclumps found   {result.n_clumps}")
+    print(f"texture radius {result.texture_radius:.1f} km")
+    print(f"texture: median {np.nanmedian(result.texture):.1f}, "
+          f"max {np.nanmax(result.texture):.1f}")
+
+    print("\nclassification")
+    fractions = stats.echo_type_fractions(result.echo_type)
+    print(f"  classified pixels {fractions['n_valid']:,}")
+    for name in ("stratiform", "mixed", "convective"):
+        print(f"    {name:12s} {fractions[name]:6.1%}")
+
+    # min_convective_area barely moves the map while changing the cell
+    # count several-fold: judge clump parameters by n_clumps, not coverage.
+    print("\nmin_convective_area (km^2)")
+    for area in (None, 4.0, 25.0, 100.0):
+        r = eccopy2d_h.run(dbz, coords_y=dy_km, coords_x=dx_km,
+                           coord_mode="spacing", window=window,
+                           texture_params=texture_params,
+                           class_params=class_params, min_convective_area=area)
+        print(f"  {str(area):>6s}: n_clumps {r.n_clumps:4d}, "
+              f"convective {stats.convective_percentage(r.echo_type):5.1f}%")
+
+    # kernel_mode matters here because the grid is genuinely non-uniform.
+    # "uniform" reproduces the reference; "varying" is arguably closer to
+    # the physical intent. Neither is ground truth for the other.
+    varying = eccopy2d_h.run(dbz, coords_y=dy_km, coords_x=dx_km,
+                             coord_mode="spacing", window=window,
+                             texture_params=texture_params,
+                             class_params=class_params, kernel_mode="varying")
+    both = np.isin(result.echo_type, [1, 2, 3]) | np.isin(varying.echo_type, [1, 2, 3])
+    agree = (result.echo_type[both] == varying.echo_type[both]).mean()
+    print(f"\nkernel_mode uniform vs varying: {100 * (1 - agree):.2f}% of "
+          f"pixels differ")
+
+    if outdir is not None:
+        plot(outdir, lat, lon, dbz, result, class_params)
+
+
+def plot(outdir, lat, lon, dbz, result, class_params):
+    """Reflectivity, convectivity and echo type, using EccoPy's colormaps."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from eccopy.core.colormaps import (BASIC_ECHO_TYPE_LABELS,
+                                       basic_echo_type_cmap,
+                                       basic_echo_type_norm, convectivity_cmap,
+                                       convectivity_norm, draw_window_ring,
+                                       remap_echo_type)
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(3, 1, figsize=(11, 10))
+
+    m = axes[0].pcolormesh(lon, lat, dbz, cmap="turbo", vmin=-10, vmax=60,
+                           shading="nearest")
+    fig.colorbar(m, ax=axes[0], pad=0.01, label="dBZ")
+    axes[0].set_title("Reflectivity", fontsize=10)
+    # The panel is in degrees, so the ring must be told that: a km circle
+    # is an ellipse in degree space.
+    draw_window_ring(axes[0], lon, lat, result.texture_radius,
+                     coord_units="degrees")
+
+    m = axes[1].pcolormesh(
+        lon, lat, result.convectivity, shading="nearest",
+        norm=convectivity_norm(),
+        cmap=convectivity_cmap(
+            strat_mixed=class_params.max_convectivity_for_stratiform,
+            mixed_conv=class_params.min_convectivity_for_convective))
+    fig.colorbar(m, ax=axes[1], pad=0.01, label="convectivity")
+    axes[1].set_title("Convectivity", fontsize=10)
+
+    m = axes[2].pcolormesh(lon, lat, remap_echo_type(result.echo_type),
+                           cmap=basic_echo_type_cmap(),
+                           norm=basic_echo_type_norm(), shading="nearest")
+    cb = fig.colorbar(m, ax=axes[2], ticks=range(1, 4), pad=0.01)
+    cb.ax.set_yticklabels(BASIC_ECHO_TYPE_LABELS)
+    axes[2].set_title("Echo type", fontsize=10)
+
+    for ax in axes:
+        ax.set_ylabel("latitude")
+    axes[-1].set_xlabel("longitude")
+    plt.tight_layout()
+
+    path = outdir / "example_2d_h.png"
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    print(f"\nwrote {path}")
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    ap.add_argument("--outdir", type=Path, default=None,
+                    help="write a figure here (needs matplotlib)")
+    main(ap.parse_args().outdir)
