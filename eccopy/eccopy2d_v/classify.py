@@ -243,6 +243,7 @@ def run(dbz: Union[np.ndarray, list],
     conv = texture_to_convectivity_linear(
         texture,
         upper_lim=tp.texture_limit_high,
+        lower_lim=tp.texture_limit_low,
     )
 
     # Melt broadcasts like temp: a full field or a (Z,) profile. It is

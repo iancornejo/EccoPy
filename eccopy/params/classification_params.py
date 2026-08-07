@@ -20,8 +20,6 @@ class ClassificationParams:
 
     Basic (EccoPy-1D / EccoPy-2D)
     --------------------------
-    strat_mixed : float        Convectivity threshold strat/mixed.      Default: 0.4
-    mixed_conv  : float        Convectivity threshold mixed/conv.       Default: 0.5
     enlarge_mixed : int        Dilation radius for mixed (pixels).      Default: 5
     enlarge_conv  : int        Dilation radius for convective (pixels). Default: 5
                                 (matches MATLAB f_classBasic.m; NOTE an
@@ -105,8 +103,6 @@ class ClassificationParams:
     # f_classBasic.m, NOT ConvStratFinder (see module/class docstring).
     # PIXEL/GATE COUNTS, not physical distances -- see class docstring
     # and core/classification.py's "PIXEL COUNTS, NOT PHYSICAL UNITS".
-    strat_mixed:  float = 0.4
-    mixed_conv:   float = 0.5
     enlarge_mixed: int  = 5
     enlarge_conv:  int  = 5    # FIXED: was 3, confirmed against MATLAB
                                 # source to be wrong; real MATLAB default

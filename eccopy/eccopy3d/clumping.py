@@ -475,6 +475,3 @@ def _compute_geom(local_mask: np.ndarray,
     }
 
 
-def col_max_convectivity(conv_3d: np.ndarray) -> np.ndarray:
-    """Column-maximum convectivity (Z,Y,X) → (Y,X)."""
-    return np.nanmax(conv_3d, axis=0)

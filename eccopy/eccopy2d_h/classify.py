@@ -234,6 +234,7 @@ def run(dbz: Union[np.ndarray, list],
     conv = texture_to_convectivity_linear(
         texture,
         upper_lim=tp.texture_limit_high,
+        lower_lim=tp.texture_limit_low,
     )
 
     # 3. 2D dual-threshold clumping (see eccopy2d_h/clumping.py)

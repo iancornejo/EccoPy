@@ -235,6 +235,7 @@ def run(dbz: Union[np.ndarray, list],
     conv = texture_to_convectivity_linear(
         texture,
         upper_lim=tp.texture_limit_high,
+        lower_lim=tp.texture_limit_low,
     )
 
     # 3. Basic classification (strat/mixed/conv - no sub-types in 1D)

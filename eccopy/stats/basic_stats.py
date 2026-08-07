@@ -21,7 +21,7 @@ convective sub-type.
 from __future__ import annotations
 
 import warnings
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional
 
 import numpy as np
 from scipy.ndimage import label, generate_binary_structure
