@@ -93,6 +93,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `eccopy/core/data/disk_strels/`.
 
 ### Fixed
+- **`conda-recipe/meta.yaml` still required `scikit-learn`**, removed as a
+  dependency in this release, and pointed its `home`/`doc_url`/`dev_url` at
+  a non-existent repository. The recipe-maintainers placeholder is also
+  filled in.
 - **A malformed row in the 3-D notebook's sub-typing table.** One row was
   missing its Mechanism cell, and GitHub-flavoured markdown rejects an
   entire table when any row's column count differs from the header -- so
@@ -145,6 +149,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check and reported a lower test count than a full run.
 
 ### Changed
+- **README rewritten** for v1.0: 693 lines to 351. Adds full citations for
+  both algorithm papers, a Mermaid diagram of the texture ->
+  convectivity -> classification chain, a per-module parameter matrix with
+  defaults, and an acknowledgements section. Drops the validation-status
+  section and the per-module quick starts, which the workflow notebooks
+  now cover.
 - **Comment and docstring rewrite, part 3 of 3** (`params/`, `stats/`,
   and the test suite), completing the pass. Comments across the package
   now describe behaviour and name their upstream counterpart rather than

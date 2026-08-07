@@ -29,7 +29,6 @@ requirements:
     - python >=3.10
     - numpy >=1.24
     - scipy >=1.10
-    - scikit-learn >=1.2
     - numba >=0.58
 
 test:
@@ -48,14 +47,12 @@ test:
     - eccopy/tests
   commands:
     - pip check
-    # Confirm the .mat reference data files installed correctly (see
-    # CHANGELOG.md 0.1.0 "Fixed" -- this was previously silently missing
-    # from built packages).
+    # Confirm the .mat reference data files installed correctly.
     - python -c "from eccopy.core.classification import _DISK_STREL_DIR, _DISK_DECOMP_DIR; import os; assert os.listdir(_DISK_STREL_DIR); assert os.listdir(_DISK_DECOMP_DIR); print('data files OK')"
     - pytest eccopy/tests -q
 
 about:
-  home: https://github.com/NCAR/eccopy
+  home: https://github.com/iancornejo/EccoPy
   license: BSD-3-Clause
   license_file: LICENSE
   summary: Data-agnostic Python implementation of the ECCO / ConvStratFinder radar echo classification algorithm
@@ -66,9 +63,9 @@ about:
     cross-sections, 2-D horizontal composites, and full 3-D volumes.
     Operates purely on numpy arrays -- no file I/O, no assumptions about
     coordinate systems or radar type.
-  doc_url: https://github.com/NCAR/eccopy#readme
-  dev_url: https://github.com/NCAR/eccopy
+  doc_url: https://github.com/iancornejo/EccoPy#readme
+  dev_url: https://github.com/iancornejo/EccoPy
 
 extra:
   recipe-maintainers:
-    - your-github-username-here
+    - iancornejo
