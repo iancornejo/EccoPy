@@ -147,3 +147,67 @@ def test_draw_window_ring_honours_explicit_center():
                         center=(10.0, 20.0), label=False)
     circ = [p for p in ax.patches if isinstance(p, Circle)][0]
     assert circ.center == (10.0, 20.0)
+
+
+# ---------------------------------------------------------------------
+# draw_window_ring on degree axes
+# ---------------------------------------------------------------------
+
+def test_draw_window_ring_rejects_unknown_coord_units():
+    import matplotlib.pyplot as plt
+    from eccopy.core.colormaps import draw_window_ring
+
+    fig, ax = plt.subplots()
+    with pytest.raises(ValueError, match="coord_units"):
+        draw_window_ring(ax, np.linspace(0, 10, 5), np.linspace(0, 10, 5),
+                         7.0, coord_units="deg")
+    plt.close(fig)
+
+
+def test_draw_window_ring_degrees_spans_the_right_physical_size():
+    """
+    On a lat/lon panel the footprint must still be `radius_km` across in
+    physical distance -- an ellipse, since a degree of longitude is shorter
+    than a degree of latitude away from the equator.
+    """
+    import matplotlib.pyplot as plt
+    from eccopy.core.colormaps import draw_window_ring
+    from eccopy.core.coords import EARTH_RADIUS_KM
+
+    lon = np.linspace(-100.0, -91.0, 50)
+    lat = np.linspace(39.0, 45.0, 50)
+    centre_lat = float(np.mean([lat[0], lat[-1]]))
+
+    fig, ax = plt.subplots()
+    patch = draw_window_ring(ax, lon, lat, 7.0, coord_units="degrees")
+
+    km_per_deg_lat = np.pi * EARTH_RADIUS_KM / 180.0
+    km_per_deg_lon = km_per_deg_lat * np.cos(np.radians(centre_lat))
+
+    assert patch.get_height() * km_per_deg_lat == pytest.approx(14.0, rel=1e-6)
+    assert patch.get_width() * km_per_deg_lon == pytest.approx(14.0, rel=1e-6)
+    # Longitude degrees are shorter here, so the ellipse is wider than tall.
+    assert patch.get_width() > patch.get_height()
+    plt.close(fig)
+
+
+def test_draw_window_ring_km_mode_is_a_circle_of_that_radius():
+    import matplotlib.pyplot as plt
+    from eccopy.core.colormaps import draw_window_ring
+
+    fig, ax = plt.subplots()
+    patch = draw_window_ring(ax, np.linspace(0, 200, 50),
+                             np.linspace(0, 200, 50), 7.0)
+    assert patch.get_radius() == pytest.approx(7.0)
+    plt.close(fig)
+
+
+def test_draw_window_ring_degrees_still_degrades_quietly_without_a_radius():
+    import matplotlib.pyplot as plt
+    from eccopy.core.colormaps import draw_window_ring
+
+    fig, ax = plt.subplots()
+    assert draw_window_ring(ax, np.linspace(-100, -91, 5),
+                            np.linspace(39, 45, 5), None,
+                            coord_units="degrees") is None
+    plt.close(fig)

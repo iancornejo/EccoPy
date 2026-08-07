@@ -7,7 +7,8 @@ from .classification import (class_basic, class_basic_isotropic, class_sub_2d,
                               CATEGORY_MIXED, CATEGORY_CONVECTIVE_ELEVATED,
                               CATEGORY_CONVECTIVE_SHALLOW, CATEGORY_CONVECTIVE_MID,
                               CATEGORY_CONVECTIVE_DEEP)
-from .coords import haversine_distance, latlon_to_xy_spacing, resolve_spacing
+from .coords import (haversine_distance, latlon_to_xy_spacing, resolve_spacing,
+                      time_to_distance_km)
 from .temperature import isotherm_height, melt_layer_from_temp, broadcast_temp_field
 from .debug import (refl_texture_1d_debug, refl_texture_2d_debug,
                     TextureDebug1D, TextureDebug2D)
@@ -44,6 +45,7 @@ __all__ = [
     "CATEGORY_CONVECTIVE_ELEVATED", "CATEGORY_CONVECTIVE_SHALLOW",
     "CATEGORY_CONVECTIVE_MID", "CATEGORY_CONVECTIVE_DEEP",
     "haversine_distance", "latlon_to_xy_spacing", "resolve_spacing",
+    "time_to_distance_km",
     "isotherm_height", "melt_layer_from_temp", "broadcast_temp_field",
     "echo_type_cmap", "echo_type_norm",
     "basic_echo_type_cmap", "basic_echo_type_norm",

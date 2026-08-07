@@ -6,6 +6,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`notebooks/eccopy1d_workflow.ipynb`** — full walkthrough of the 1-D
+  pipeline on the bundled disdrometer record: deriving reflectivity from a
+  drop-size distribution, unit-typed time windows, wind-advected distance
+  coordinates via `time_to_distance_km()`, `min_convective_length`, and a
+  sweep helper. Completes one notebook per module; the synthetic-data
+  notebooks under `notebooks/workflow_examples/` are removed, and
+  `notebooks/README.md` indexes the four that replace them.
+- **`eccopy.time_to_distance_km`** is now exported from `eccopy` and
+  `eccopy.core`, alongside `haversine_distance`, `latlon_to_xy_spacing`
+  and `resolve_spacing`. It was public, tested, and recommended by
+  `eccopy1d`'s own docstring, but reachable only as
+  `eccopy.core.coords.time_to_distance_km`.
 - **`notebooks/eccopy2d_h_workflow.ipynb`** — full walkthrough of the 2-D-H
   pipeline on the bundled MRMS composite: lat/lon to physical spacing via
   `latlon_to_xy_spacing()`, the `kernel_mode` comparison (this is the one
@@ -76,6 +88,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `eccopy/core/data/disk_strels/`.
 
 ### Fixed
+- **`draw_window_ring()` drew a wildly oversized footprint on
+  latitude/longitude panels.** It placed a circle of radius `radius_km`
+  directly in axis units, so a 7 km window on a degree-based axis was drawn
+  as a 7 *degree* circle -- roughly a hundredfold overstatement, and
+  plausible enough to pass a glance. A `coord_units` argument now selects
+  between `"km"` (unchanged, still a circle) and `"degrees"`, which draws
+  the physically correct ellipse sized from the ring centre's latitude
+  using the same earth radius as `core.coords`. An unrecognised value
+  raises rather than guessing.
 - **`eccopy.stats` miscounted every `eccopy3d` result.** The validity test
   was `~np.isnan(echo_type)`, but `eccopy3d` returns `int16` with
   `CATEGORY_MISSING` (0) as its no-echo sentinel rather than NaN, so every
