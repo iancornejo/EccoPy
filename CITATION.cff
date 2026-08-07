@@ -12,6 +12,16 @@ authors:
     orcid: "https://orcid.org/0009-0007-7030-9790"
     affiliation: Colorado State University
 repository-code: "https://github.com/iancornejo/EccoPy"
+doi: 10.5281/zenodo.21840861
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21840860
+    description: >-
+      Concept DOI, resolving to the most recent release. Cite this in
+      preference to a version DOI unless you need to pin an exact release.
+  - type: doi
+    value: 10.5281/zenodo.21840861
+    description: Version DOI for the v1.0.0 release.
 abstract: >-
   EccoPy separates convective from stratiform radar echo using the ECCO
   (Echo Classification from COnvectivity) algorithm, in four variants

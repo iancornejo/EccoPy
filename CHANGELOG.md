@@ -5,6 +5,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Zenodo DOI badge and citation details in `README.md` and
+  `CITATION.cff`. The concept DOI (10.5281/zenodo.21840860) resolves to
+  the latest release; the v1.0.0 version DOI is 10.5281/zenodo.21840861.
+
 ## [1.0.0] - 2026-08-07
 
 First stable release. The public API is now covered by semantic
