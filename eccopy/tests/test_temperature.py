@@ -1,11 +1,9 @@
 """
 Tests for eccopy.core.temperature.
 
-isotherm_height() previously had zero test coverage, which is how both
-a shape-convention bug (it used the old (nx,ny,nz) ordering instead of
-the package-wide (Z,Y,X) convention) and a NaN-gap interpolation bug
-(adjacent-pair-only crossing search couldn't see a crossing straddled by
-a NaN gap) went unnoticed. These tests are deliberately thorough.
+isotherm_height() is covered thoroughly here: it pins the package-wide
+(Z, Y, X) axis convention, and the crossing search across NaN gaps, where
+an adjacent-pair-only search would miss a straddled crossing.
 """
 
 import numpy as np

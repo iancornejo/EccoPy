@@ -56,10 +56,8 @@ def test_temp_enables_subclassification():
 
 
 def test_height_melt_and_temp_together_enable_subclassification():
-    """The actual current trigger for sub-classification: height, melt,
-    AND temp must ALL be provided together (see module docstring 'API
-    CHANGE' -- height/temp alone used to be accepted as alternatives,
-    but the real f_classSub.m reference requires all three)."""
+    """Sub-classification triggers only when height, melt and temp are
+    all supplied; f_classSub.m requires all three."""
     dbz, z_km, x_km = _synthetic_section()
     height = np.broadcast_to(z_km[:, None], dbz.shape).copy()
     temp = 20 - 6.5 * height
@@ -192,13 +190,10 @@ def test_rejects_wrong_ndim():
 # ---------------------------------------------------------------------------
 
 def test_row_varying_coords_x_uses_each_rows_own_spacing():
-    """A genuinely 2-D coords_x (spacing that differs by Z level) must
-    resolve each row's own window radius when kernel_mode='varying' --
-    see core/texture.py's refl_texture_1d fix. Regression test for the
-    bug found/fixed last session: row 0's spacing used to be silently
-    applied to every row. Not the default any more (see
-    test_kernel_mode_uniform_is_default_for_2d_v below) -- 'varying'
-    must be requested explicitly."""
+    """A 2-D coords_x whose spacing differs by Z level must resolve each
+    row's own window radius under kernel_mode='varying', rather than
+    applying row 0's radius to every row. 'varying' is not the default;
+    see test_kernel_mode_uniform_is_default_for_2d_v below."""
     nz, nx = 3, 60
     rng = np.random.default_rng(7)
     dbz = 15 + rng.normal(0, 2, (nz, nx))
@@ -219,9 +214,8 @@ def test_row_varying_coords_x_uses_each_rows_own_spacing():
                                 window=WindowSpec((5, "km")), kernel_mode="varying")
     np.testing.assert_allclose(r_2d.texture[2], r_row2_alone.texture, equal_nan=True)
 
-    # And it should NOT match what row 0's (finer) spacing would have
-    # produced for the same data -- confirms 'varying' actually changed
-    # behavior, not just that both code paths agree by coincidence.
+    # And must NOT match what row 0's finer spacing would produce, so
+    # the two paths are not agreeing by coincidence.
     r_row2_wrong_spacing = eccopy1d.run(dbz[2], coords=x_fine,
                                         window=WindowSpec((5, "km")), kernel_mode="varying")
     assert not np.allclose(r_2d.texture[2], r_row2_wrong_spacing.texture, equal_nan=True)

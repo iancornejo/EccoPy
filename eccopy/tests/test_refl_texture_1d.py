@@ -1,8 +1,9 @@
-"""Tests for eccopy.core.texture.refl_texture_1d() -- specifically its
-per-row spacing/window-radius resolution (see core/texture.py's
-"FIXED this session" docstring note). A prior version silently resolved
-the window radius from only row 0's spacing whenever a genuinely
-row-varying (ndim > 1) spacing array was passed."""
+"""Tests for eccopy.core.texture.refl_texture_1d(), specifically its
+per-row spacing and window-radius resolution.
+
+Pins that a row-varying (ndim > 1) spacing array resolves a radius per
+row, rather than applying row 0's radius to every row.
+"""
 
 import numpy as np
 import pytest
@@ -32,12 +33,12 @@ def test_uniform_spacing_across_rows_unaffected():
 
 
 def test_row_varying_spacing_uses_each_rows_own_spacing():
-    """The actual bug fix from last session: a row with different spacing
-    than row 0 must get its OWN resolved window radius, not row 0's --
-    only true in kernel_mode='varying' (the default 'uniform' mode
-    deliberately collapses row-varying spacing to one global-median
-    radius, see test_uniform_kernel_mode_is_default_and_collapses_to_
-    global_median below)."""
+    """A row whose spacing differs from row 0 must resolve its own window
+    radius, not row 0's. True only under kernel_mode='varying'; the
+    default 'uniform' mode collapses row-varying spacing to a single
+    global-median radius - see
+    test_uniform_kernel_mode_is_default_and_collapses_to_global_median
+    below."""
     rng = np.random.default_rng(1)
     nz, nx = 3, 60
     dbz2d = 15 + rng.normal(0, 3, (nz, nx))

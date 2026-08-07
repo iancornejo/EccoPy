@@ -118,7 +118,7 @@ def test_pyproject_sources_version_from_package_attribute():
 def test_no_scikit_learn_dependency():
     """
     scikit-learn is not a runtime dependency and is not imported anywhere
-    in the package. It was previously pulled in by a single unused helper.
+    in the package.
     """
     text = (PKG_ROOT / "pyproject.toml").read_text()
     assert "scikit-learn" not in text
