@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 150" width="940" height="150"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>EccoPy workflow: reflectivity to texture to convectivity to echo type</title>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <!-- reflectivity -->
+  <rect x="8" y="34" width="176" height="82" rx="8"
+        fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="96" y="70" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">reflectivity</text>
+  <text x="96" y="92" text-anchor="middle" font-size="13" fill="#57606a">(dBZ)</text>
+
+  <line x1="192" y1="75" x2="228" y2="75" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <!-- texture -->
+  <rect x="236" y="34" width="196" height="82" rx="8"
+        fill="#fff8f0" stroke="#e5a663" stroke-width="1.5"/>
+  <text x="334" y="62" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">texture</text>
+  <text x="334" y="82" text-anchor="middle" font-size="12" fill="#57606a">variability in a</text>
+  <text x="334" y="99" text-anchor="middle" font-size="12" fill="#57606a">sliding window</text>
+
+  <line x1="440" y1="75" x2="476" y2="75" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <!-- convectivity -->
+  <rect x="484" y="34" width="216" height="82" rx="8"
+        fill="#fff0f0" stroke="#d98b8b" stroke-width="1.5"/>
+  <text x="592" y="62" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">convectivity</text>
+  <text x="592" y="82" text-anchor="middle" font-size="12" fill="#57606a">texture / texture_limit_high,</text>
+  <text x="592" y="99" text-anchor="middle" font-size="12" fill="#57606a">clipped to 0-1</text>
+
+  <line x1="708" y1="75" x2="744" y2="75" stroke="#57606a" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <!-- echo type -->
+  <rect x="752" y="34" width="180" height="82" rx="8"
+        fill="#f0f6ff" stroke="#7aa7d9" stroke-width="1.5"/>
+  <text x="842" y="62" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">echo type</text>
+  <text x="842" y="82" text-anchor="middle" font-size="12" fill="#57606a">thresholded, cleaned,</text>
+  <text x="842" y="99" text-anchor="middle" font-size="12" fill="#57606a">sub-classified</text>
+</svg>

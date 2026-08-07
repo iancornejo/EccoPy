@@ -5,7 +5,28 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-07
+
+Documentation and packaging metadata only. No code changes; EccoPy 1.0.1
+behaves identically to 1.0.0.
+
+### Changed
+- **`authors` is now Ian Christian Cornejo <ian.cornejo@colostate.edu>.**
+  1.0.0 shipped `NCAR-EOL <romatschke@ucar.edu>`, which PyPI renders under
+  Credits as the package author and which is no longer a current address.
+  EccoPy is an implementation of the ECCO algorithm, not the algorithm
+  itself; M. J. Dixon and U. Romatschke are credited through the two paper
+  references and the acknowledgements, matching `CITATION.cff`. The
+  redundant `maintainers` entry is removed.
+
 ### Fixed
+- **README links now absolute.** `CONTRIBUTING.md`, `CHANGELOG.md`,
+  `LICENSE` and `notebooks/data/README.md` were relative, so they resolved
+  against `pypi.org/project/eccopy/` and 404'd on the PyPI page.
+- **The workflow diagram now renders on PyPI.** It was a Mermaid code
+  block, which GitHub renders but PyPI displays as raw source. Replaced
+  with `docs/workflow.svg`, referenced by absolute URL so it renders in
+  both places.
 - `conda-recipe/meta.yaml` pinned `setuptools >=68` in its host section
   while `pyproject.toml`'s build-system requires `>=77` for PEP 639 SPDX
   license expressions. Because the recipe builds with
@@ -390,3 +411,4 @@ utilities.
 
 [0.1.0]: https://github.com/iancornejo/EccoPy/releases/tag/v0.1.0
 [1.0.0]: https://github.com/iancornejo/EccoPy/releases/tag/v1.0.0
+[1.0.1]: https://github.com/iancornejo/EccoPy/releases/tag/v1.0.1

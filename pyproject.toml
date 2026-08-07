@@ -12,10 +12,7 @@ license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
-    { name = "NCAR-EOL", email = "romatschke@ucar.edu" },
-]
-maintainers = [
-    { name = "Ian Christian Cornejo" },
+    { name = "Ian Christian Cornejo", email = "ian.cornejo@colostate.edu" },
 ]
 keywords = ["radar", "meteorology", "precipitation", "convection", "echo-classification"]
 classifiers = [

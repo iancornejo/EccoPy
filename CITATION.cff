@@ -38,7 +38,7 @@ keywords:
   - convection
   - echo classification
 license: BSD-3-Clause
-version: 1.0.0
+version: 1.0.1
 date-released: "2026-08-07"
 references:
   - type: article

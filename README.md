@@ -53,12 +53,7 @@ Requires Python 3.10+, NumPy, SciPy and Numba.
 
 Every module runs the same three stages.
 
-```mermaid
-flowchart LR
-    A["reflectivity<br/>(dBZ)"] --> B["<b>texture</b><br/>variability in a<br/>sliding window"]
-    B --> C["<b>convectivity</b><br/>texture / texture_limit_high,<br/>clipped to 0-1"]
-    C --> D["<b>echo type</b><br/>thresholded, cleaned,<br/>sub-classified"]
-```
+![reflectivity to texture to convectivity to echo type](https://raw.githubusercontent.com/iancornejo/EccoPy/main/docs/workflow.svg)
 
 **Texture** measures how much reflectivity varies within a window, after a
 local linear trend is removed. Convection is spatially rough; stratiform
@@ -363,7 +358,7 @@ the method is theirs.
 The ECCO algorithm is the work of Michael Dixon and Ulrike Romatschke at
 NCAR; EccoPy is a port, not a new method. The sample datasets bundled with
 the notebooks were provided by the individuals and campaigns credited in
-[notebooks/data/README.md](notebooks/data/README.md).
+[notebooks/data/README.md](https://github.com/iancornejo/EccoPy/blob/main/notebooks/data/README.md).
 
 Portions of the v1.0 refactor were developed with assistance from
 Anthropic's Claude.
@@ -375,13 +370,13 @@ support for new instruments and file conventions, or performance work. If you
 use EccoPy on a dataset it was not designed around and something breaks or
 looks wrong, that is worth an issue on its own.
 
-[CONTRIBUTING.md](CONTRIBUTING.md) describes the development workflow. The one
+[CONTRIBUTING.md](https://github.com/iancornejo/EccoPy/blob/main/CONTRIBUTING.md) describes the development workflow. The one
 thing to read before changing the classification path is the ground-truth
 standard: changes there are verified against real MATLAB or C++ reference
 output, not against physical reasoning alone.
 
-Release history is in [CHANGELOG.md](CHANGELOG.md).
+Release history is in [CHANGELOG.md](https://github.com/iancornejo/EccoPy/blob/main/CHANGELOG.md).
 
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE](https://github.com/iancornejo/EccoPy/blob/main/LICENSE).
