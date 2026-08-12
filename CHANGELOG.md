@@ -5,6 +5,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- conda-forge install instructions and status badges (PyPI version,
+  conda-forge version, supported Python versions, license) in `README.md`.
+  EccoPy is now available as `conda install -c conda-forge eccopy`.
+
 ## [1.0.1] - 2026-08-07
 
 Documentation and packaging metadata only. No code changes; EccoPy 1.0.1

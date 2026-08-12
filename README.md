@@ -1,5 +1,9 @@
 # EccoPy
 
+[![PyPI](https://img.shields.io/pypi/v/eccopy.svg)](https://pypi.org/project/eccopy/)
+[![conda-forge](https://img.shields.io/conda/vn/conda-forge/eccopy.svg)](https://anaconda.org/conda-forge/eccopy)
+[![Python versions](https://img.shields.io/pypi/pyversions/eccopy.svg)](https://pypi.org/project/eccopy/)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](https://github.com/iancornejo/EccoPy/blob/main/LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21840860.svg)](https://doi.org/10.5281/zenodo.21840860)
 
 Data-agnostic Python implementation of **ECCO** (Echo Classification from
@@ -43,11 +47,19 @@ Reference implementations, which EccoPy ports:
 ## Installation
 
 ```bash
+conda install -c conda-forge eccopy
+```
+
+or
+
+```bash
 pip install eccopy
 pip install "eccopy[plot]"   # adds matplotlib for eccopy.core.colormaps
 ```
 
-Requires Python 3.10+, NumPy, SciPy and Numba.
+Requires Python 3.10+, NumPy, SciPy and Numba. `eccopy.core.colormaps`
+additionally needs matplotlib, which the `[plot]` extra installs; with conda,
+`conda install -c conda-forge matplotlib-base`.
 
 ## The workflow
 
