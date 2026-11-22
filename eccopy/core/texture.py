@@ -1268,6 +1268,14 @@ class _TextureKernels2D:
     coordinates are built from at each point: the median spacing
     broadcast over the grid in "uniform" mode, the local spacing in
     "varying" mode. Either may be a read-only broadcast view.
+
+    Each stored window is also described as row runs, for counting
+    coverage from prefix sums (_fraction_active_rows): window `k` covers,
+    for each q in ``run_ptr[k]:run_ptr[k + 1]``, the cells
+    ``(iy + run_dy[q], ix + run_lo[q] .. ix + run_hi[q])``. A circular
+    window always is such a stack of contiguous runs; ``k_runs[k]`` is
+    False for any window that is not, which is then counted cell by cell.
+    ``halo_y`` bounds |jdy| over every window the grid can use.
     """
     kernel_mode: str
     radius_km: float
@@ -1281,6 +1289,12 @@ class _TextureKernels2D:
     scale_y: np.ndarray
     scale_x: np.ndarray
     max_kernel: int
+    run_ptr: np.ndarray
+    run_dy: np.ndarray
+    run_lo: np.ndarray
+    run_hi: np.ndarray
+    k_runs: np.ndarray
+    halo_y: int
 
     @property
     def n_kernels(self) -> int:
@@ -1291,6 +1305,45 @@ class _TextureKernels2D:
     def n_rows_per_point(self) -> int:
         """Rows that rebuild the window at every point (1.0 behaviour)."""
         return int(np.count_nonzero(self.row_kernel == ROW_PER_POINT))
+
+
+def _kernel_runs(k_ptr: np.ndarray, k_jdx: np.ndarray, k_jdy: np.ndarray):
+    """
+    Row-run form of each stored window (see _TextureKernels2D): for every
+    distinct jdy in a window, in order, the jdx range it spans. A window
+    whose offsets in some row are not one contiguous jdx range gets
+    ``k_runs[k] = False`` and no runs.
+    """
+    n_k = len(k_ptr) - 1
+    run_ptr = np.zeros(n_k + 1, dtype=np.int64)
+    k_runs = np.ones(n_k, dtype=np.bool_)
+    dys, los, his = [], [], []
+    for k in range(n_k):
+        jdx = k_jdx[k_ptr[k]:k_ptr[k + 1]]
+        jdy = k_jdy[k_ptr[k]:k_ptr[k + 1]]
+        runs = []
+        i = 0
+        ok = True
+        while i < len(jdy):
+            j = i
+            while j < len(jdy) and jdy[j] == jdy[i]:
+                j += 1
+            row = jdx[i:j]
+            if not np.array_equal(row, np.arange(row[0], row[0] + len(row))):
+                ok = False
+                break
+            runs.append((int(jdy[i]), int(row[0]), int(row[-1])))
+            i = j
+        if not ok:
+            k_runs[k] = False
+            runs = []
+        for dy_, lo, hi in runs:
+            dys.append(dy_)
+            los.append(lo)
+            his.append(hi)
+        run_ptr[k + 1] = run_ptr[k] + len(runs)
+    as64 = lambda v: np.asarray(v, dtype=np.int64)
+    return run_ptr, as64(dys), as64(los), as64(his), k_runs
 
 
 def _nanmedian_all(a: np.ndarray) -> float:
@@ -1425,14 +1478,17 @@ def _prepare_texture_2d(radius_km: float,
         row_kernel = np.full(ny, ROW_SKIP, dtype=np.int64)
         if ny - ny_tex > ny_tex:
             row_kernel[ny_tex:ny - ny_tex] = 0
+        k_ptr = np.array([0, len(jdx)], dtype=np.int64)
+        run_ptr, run_dy, run_lo, run_hi, k_runs = _kernel_runs(k_ptr, jdx, jdy)
         return _TextureKernels2D(
             kernel_mode="uniform", radius_km=float(radius_km), shape=(ny, nx),
-            k_ptr=np.array([0, len(jdx)], dtype=np.int64),
-            k_jdx=jdx, k_jdy=jdy, row_kernel=row_kernel,
+            k_ptr=k_ptr, k_jdx=jdx, k_jdy=jdy, row_kernel=row_kernel,
             ix0=int(nx_tex), ix1=int(nx - nx_tex),
             scale_y=np.broadcast_to(np.float64(dy_km), (ny, nx)),
             scale_x=np.broadcast_to(np.float64(dx_km), (ny, nx)),
             max_kernel=int(len(jdx)),
+            run_ptr=run_ptr, run_dy=run_dy, run_lo=run_lo, run_hi=run_hi,
+            k_runs=k_runs, halo_y=int(ny_tex),
         )
 
     # --- kernel_mode == "varying" ---
@@ -1496,11 +1552,16 @@ def _prepare_texture_2d(radius_km: float,
     if np.any(row_kernel == ROW_PER_POINT):
         max_kernel = max(max_kernel,
                          (2 * max_nx_tex + 1) * (2 * max_ny_tex + 1))
+    k_jdx = k_jdx.astype(np.int64)
+    k_jdy = k_jdy.astype(np.int64)
+    run_ptr, run_dy, run_lo, run_hi, k_runs = _kernel_runs(k_ptr, k_jdx, k_jdy)
     return _TextureKernels2D(
         kernel_mode="varying", radius_km=float(radius_km), shape=(ny, nx),
-        k_ptr=k_ptr, k_jdx=k_jdx.astype(np.int64), k_jdy=k_jdy.astype(np.int64),
+        k_ptr=k_ptr, k_jdx=k_jdx, k_jdy=k_jdy,
         row_kernel=row_kernel, ix0=ix0, ix1=ix1,
         scale_y=dy, scale_x=dx, max_kernel=int(max_kernel),
+        run_ptr=run_ptr, run_dy=run_dy, run_lo=run_lo, run_hi=run_hi,
+        k_runs=k_runs, halo_y=int(max_ny_tex),
     )
 
 
@@ -1509,6 +1570,9 @@ def _fraction_active_rows(dbz_col_max: np.ndarray,
                           min_valid_dbz: float,
                           k_ptr: np.ndarray, k_jdx: np.ndarray,
                           k_jdy: np.ndarray, row_kernel: np.ndarray,
+                          run_ptr: np.ndarray, run_dy: np.ndarray,
+                          run_lo: np.ndarray, run_hi: np.ndarray,
+                          k_runs: np.ndarray, halo_y: int,
                           scale_y: np.ndarray, scale_x: np.ndarray,
                           radius_km: float,
                           ix0: int, ix1: int,
@@ -1516,26 +1580,37 @@ def _fraction_active_rows(dbz_col_max: np.ndarray,
                           fraction: np.ndarray) -> None:
     """
     Coverage fraction for rows row_start <= iy < row_stop, written into
-    `fraction` in place. Same count and division as
+    `fraction` (pre-filled with 0.0) in place. Same count and division as
     _compute_fraction_active_core() (a stored window) or
     _compute_fraction_active_varying() (a ROW_PER_POINT row).
 
-    `dbz_col_max` is the column maximum of the UNMASKED reflectivity, NaN
-    where a column has no data. The 1.0 path first masked values below
-    min_valid_dbz to NaN, took the column maximum, filled NaN with -9999,
-    and counted cells >= min_valid_dbz. A cell passes that test exactly
-    when its unmasked maximum is >= min_valid_dbz, or when the -9999 fill
-    itself passes (min_valid_dbz <= -9999, e.g. -inf) -- in which case
-    every cell counts. Testing that directly needs neither the masked
-    copy nor the filled one, and counts the same cells.
+    Which cells count. `dbz_col_max` is the column maximum of the
+    UNMASKED reflectivity, NaN where a column has no data. The 1.0 path
+    first masked values below min_valid_dbz to NaN, took the column
+    maximum, filled NaN with -9999, and counted cells >= min_valid_dbz. A
+    cell passes that test exactly when its unmasked maximum is
+    >= min_valid_dbz, or when the -9999 fill itself passes
+    (min_valid_dbz <= -9999, e.g. -inf) -- in which case every cell
+    counts. Testing that directly needs neither the masked copy nor the
+    filled one, and counts the same cells.
+
+    How they are counted. A stored window is a stack of contiguous row
+    runs (see _TextureKernels2D), so its count is a sum over runs of
+    prefix-sum differences -- two reads per run (~13 for a 7 km window)
+    instead of one per cell (~150-220) -- and it is the same integer.
+    Rows whose window reaches no valid cell at all are skipped, leaving
+    the 0.0 the count would give: on a typical continental composite
+    most of the domain is such ground. ROW_PER_POINT rows and any window
+    without runs are counted cell by cell, as in 1.0.
     """
+    ny, nx = dbz_col_max.shape
     fill_valid = -9999.0 >= min_valid_dbz
-    for iy in range(row_start, row_stop):
-        kb = row_kernel[iy]
-        if kb == ROW_SKIP:
-            continue
-        if fill_valid:
-            # Every cell counts: count == n_kernel at every point.
+    if fill_valid:
+        # Every cell counts: count == n_kernel at every point.
+        for iy in range(row_start, row_stop):
+            kb = row_kernel[iy]
+            if kb == ROW_SKIP:
+                continue
             for ix in range(ix0, ix1):
                 if kb >= 0:
                     n_kernel = k_ptr[kb + 1] - k_ptr[kb]
@@ -1544,8 +1619,45 @@ def _fraction_active_rows(dbz_col_max: np.ndarray,
                         radius_km, scale_x[iy, ix], scale_y[iy, ix])[0])
                 if n_kernel > 0:
                     fraction[iy, ix] = n_kernel / n_kernel
+        return
+
+    # Prefix sums of the valid-cell mask for every row this block's
+    # windows can reach: psum[r - r0, c] = valid cells in row r, columns
+    # 0 .. c-1. Local to the block, so blocks run independently.
+    r0 = max(0, row_start - halo_y)
+    r1 = min(ny, row_stop + halo_y)
+    psum = np.zeros((max(r1 - r0, 0), nx + 1), dtype=np.int32)
+    for r in range(r0, r1):
+        acc = 0
+        for c in range(nx):
+            if dbz_col_max[r, c] >= min_valid_dbz:
+                acc += 1
+            psum[r - r0, c + 1] = acc
+
+    for iy in range(row_start, row_stop):
+        kb = row_kernel[iy]
+        if kb == ROW_SKIP:
             continue
-        if kb >= 0:
+        if kb >= 0 and k_runs[kb]:
+            n_kernel = k_ptr[kb + 1] - k_ptr[kb]
+            if n_kernel == 0:
+                continue
+            rdy = run_dy[run_ptr[kb]:run_ptr[kb + 1]]
+            rlo = run_lo[run_ptr[kb]:run_ptr[kb + 1]]
+            rhi = run_hi[run_ptr[kb]:run_ptr[kb + 1]]
+            n_runs = len(rdy)
+            reachable = 0
+            for q in range(n_runs):
+                reachable += psum[iy + rdy[q] - r0, nx]
+            if reachable == 0:
+                continue          # no valid cell within reach: count is 0
+            for ix in range(ix0, ix1):
+                count = 0
+                for q in range(n_runs):
+                    rr = iy + rdy[q] - r0
+                    count += psum[rr, ix + rhi[q] + 1] - psum[rr, ix + rlo[q]]
+                fraction[iy, ix] = count / n_kernel
+        elif kb >= 0:
             # Slice the stored window rather than indexing k_jdx[s:e] with
             # a loop from s: a loop index that starts at 0 lets Numba drop
             # its negative-index check on every read (~2x faster here).
@@ -1966,7 +2078,8 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
         row_start, row_stop = rows
         _fraction_active_rows(
             dbz_col_max, min_valid_dbz, k.k_ptr, k.k_jdx, k.k_jdy,
-            k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
+            k.row_kernel, k.run_ptr, k.run_dy, k.run_lo, k.run_hi,
+            k.k_runs, k.halo_y, k.scale_y, k.scale_x, k.radius_km,
             k.ix0, k.ix1, row_start, row_stop, fraction_active,
         )
         for iz in range(nz):
@@ -1983,7 +2096,11 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
         with ThreadPoolExecutor(max_workers=n_threads) as ex:
             list(ex.map(_process_rows, _row_blocks(ny, n_threads)))
     else:
-        _process_rows((0, ny))
+        # Blocks even on one thread: each block's coverage prefix sums are
+        # block-sized, so the transient stays a few MB instead of a full
+        # (ny, nx + 1) array.
+        for rows in _row_blocks(ny, 1):
+            _process_rows(rows)
 
     if out_dtype != np.float64:
         fraction_active = fraction_active.astype(out_dtype)

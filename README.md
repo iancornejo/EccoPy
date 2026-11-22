@@ -318,6 +318,11 @@ uses all of them, and the result is the same at any thread count. (In EccoPy
 For very large grids - full-CONUS MRMS is 3500 x 7000 - process one file at a
 time and reduce as you go rather than opening many at once.
 
+On the full MRMS CONUS grid at 7 % echo cover, `eccopy2d_h.run()` takes
+2.5-3 s on one core and 1.5-2 s on two, in either kernel mode, against
+5.3 s (`"uniform"`) and 31 s (`"varying"`) for EccoPy 1.0 (measured on a
+2-core cloud VM; the lower figures are with a prepared grid).
+
 To keep memory down on large `eccopy2d_h` grids, pass spacing as broadcast
 views (`latlon_grid_spacing()` builds them for a lat/lon grid) and keep
 reflectivity in float32; neither changes the result. `dtype=np.float32`

@@ -63,6 +63,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Convectivity is built in one array, and clump area is formed one bounding
   box at a time. On the CONUS grid, peak memory above the input drops from
   about 1.4 GB to 0.8 GB (0.5 GB with `dtype=np.float32`).
+- **Coverage (`fraction_active`) is counted from per-row prefix sums, and
+  rows whose window reaches no echo are skipped.** A circular window is a
+  stack of contiguous row runs, so its count takes two reads per run (13
+  for a 7 km window) instead of one per cell (150-220), and gives the same
+  integer. On the CONUS grid coverage drops from 2.7 s to 0.5 s. Results are
+  bit-for-bit unchanged.
 
 ### Fixed
 - **`eccopy3d`'s `n_threads` had almost no effect.** Its per-level threads
