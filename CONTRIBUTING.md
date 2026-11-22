@@ -19,7 +19,7 @@ NUMBA_DISABLE_JIT=1 pytest eccopy/tests/ --cov=eccopy
 Numba-compiled functions are invisible to coverage.py, which understates
 `core/texture.py` and `core/temperature.py` by roughly 55 points each.
 
-All 375 tests should pass before and after any change. If you add a
+All 440 tests should pass before and after any change. If you add a
 feature, add tests for it in `eccopy/tests/` — see the existing files
 for the project's style (plain `pytest` functions, synthetic data
 generated in the test file itself, no fixtures files).
