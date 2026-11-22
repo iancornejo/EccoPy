@@ -128,13 +128,16 @@ def run(dbz: Union[np.ndarray, list],
               does for lat/lon grids (a single dx/dy computed at the
               domain's mean latitude). Fast; becomes approximate for
               domains spanning a wide latitude range.
-          'varying' - rebuilds the kernel from the local spacing at
+          'varying' - resolves the kernel from the local spacing at
               every grid point, so the physical kernel size stays
               correct across large/non-uniform domains. This is NOT
-              what LROSE does and is unvalidated against LROSE output;
-              substantially slower. Recommended only for domains where
-              'uniform' is known to break down (e.g. continental-scale
-              lat/lon grids).
+              what LROSE does and is unvalidated against LROSE output.
+              Each distinct kernel is built once and reused, so on a
+              grid whose spacing varies only along y (lat/lon) it costs
+              about what 'uniform' does; where spacing varies along x
+              the kernel is rebuilt per point, which is much slower.
+              Recommended only for domains where 'uniform' is known to
+              break down (e.g. continental-scale lat/lon grids).
     texture_params, class_params, vert_params : optional param objects
     n_threads : int
         Parallel threads for per-level texture computation.

@@ -9,6 +9,31 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - conda-forge install instructions and status badges (PyPI version,
   conda-forge version, supported Python versions, license) in `README.md`.
   EccoPy is now available as `conda install -c conda-forge eccopy`.
+- **`eccopy2d_h.prepare_grid()` and `run(dbz, grid=...)`.** Everything
+  `run()` derives from the coordinates - the spacing, the texture radius and
+  the texture windows - depends only on the grid, so a caller classifying a
+  stream of frames on one grid (an operational mosaic, a fixed radar's
+  Cartesian grid) can resolve it once and pass it to every call.
+  `run(dbz, grid=prepare_grid(...))` returns exactly what `run()` returns
+  for the same arguments. To make that unambiguous, `coords_y`, `coords_x`,
+  `window`, `coord_mode` and `kernel_mode` now default to `None`, meaning
+  the same defaults as before; passing any of them together with `grid=`
+  raises instead of being silently ignored.
+
+### Changed
+- **`kernel_mode="varying"` builds each distinct texture window once.** 1.0
+  rebuilt the window at every grid point. On a regular lat/lon grid the
+  window depends only on latitude - the full MRMS CONUS grid needs 23
+  distinct windows at 7 km - so the same few windows were rebuilt tens of
+  millions of times. Rows now share a window wherever the row's spacing
+  admits only one, which is every row of a lat/lon grid; a row whose
+  spacing changes the window along the row keeps the per-point rebuild, so
+  grids that are not lat/lon fall back automatically. Both kernel modes now
+  run through the same cores (`"uniform"` is the one-window case). Results
+  are bit-for-bit identical to 1.0 in both modes, checked against a frozen
+  copy of the 1.0.1 code on random grids, the bundled datasets and a
+  CONUS-size grid. On that grid at 7 % echo cover, `"varying"` drops from
+  31 s to about 6 s, the cost of `"uniform"`.
 
 ## [1.0.1] - 2026-08-07
 

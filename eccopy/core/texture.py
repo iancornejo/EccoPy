@@ -9,10 +9,12 @@ Two families of functions:
     array (e.g. when resolved from a physical-unit WindowSpec against a
     non-uniform spacing array).
 
-2-D radial with planar detrend (EccoPy-3D)
+2-D radial with planar detrend (EccoPy-3D / EccoPy-2D-H)
     refl_texture_2d() - port of ConvStratFinder::ComputeTexture::run(),
     generalised to accept per-point dy/dx spacing arrays instead of
-    assuming a uniform grid.
+    assuming a uniform grid. Since EccoPy 1.1 it resolves each distinct
+    window once and reuses it ("Prepared 2-D windows" below); the 1.0
+    cores it replaced are kept as the reference it is tested against.
 
 Both carry the math of the LROSE-derived implementations unchanged; the
 window/spacing resolution accepts per-point rather than globally uniform
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
@@ -645,6 +648,15 @@ def refl_texture_1d_with_fit(dbz: np.ndarray,
 # ---------------------------------------------------------------------------
 # 2-D radial texture (used by EccoPy-3D)
 # ---------------------------------------------------------------------------
+#
+# The kernel builders here are used throughout (including by
+# eccopy.core.debug). The fraction/texture cores below them --
+# _compute_fraction_active*, _compute_texture_one_level* -- are the
+# EccoPy 1.0 cores. refl_texture_2d() no longer calls them (see "Prepared
+# 2-D windows" further down); they are kept unchanged as the validated
+# reference the 1.1 cores must reproduce bit for bit, and are themselves
+# cross-validated against pure-Python references in
+# tests/test_numba_cross_validation.py.
 
 def _build_kernel_offsets_uniform(radius_km: float, dx_km: float, dy_km: float):
     """
@@ -1203,6 +1215,531 @@ def _compute_texture_one_level(dbz_level: np.ndarray,
     )
 
 
+# ---------------------------------------------------------------------------
+# Prepared 2-D windows (EccoPy 1.1): build each distinct window once
+# ---------------------------------------------------------------------------
+#
+# The 1.0 cores above take ONE window for the whole grid ("uniform") or
+# rebuild the window at EVERY point ("varying"). On a regular lat/lon grid
+# the varying window depends only on the row, so the 1.0 varying path
+# rebuilt the same couple of dozen windows tens of millions of times.
+#
+# _TextureKernels2D below stores each distinct window once, plus the
+# window each row uses, and _fraction_active_rows()/_texture_rows() reuse
+# it. Both kernel modes run through these cores: "uniform" is simply the
+# case of one window shared by every row.
+#
+# Equivalence with the 1.0 cores is bit-for-bit, not approximate:
+#
+#   1. Which offsets a point's window contains is a monotone function of
+#      that point's spacing. In _point_kernel_offsets_arrays() every test
+#      -- floor(r/dx + 0.5), |jdx*dx|, sqrt(yy*yy + xx*xx) <= r -- is
+#      monotone in dx and dy under IEEE arithmetic, so a larger spacing can
+#      only remove offsets. Hence if the windows built from a row's
+#      smallest and largest spacing are identical, every point in that
+#      row has exactly that window, in the same order.
+#   2. The plane-fit coordinates are still formed per point, as
+#      jdx * dx[iy, ix] and jdy * dy[iy, ix] -- the same products the 1.0
+#      cores formed -- and every sum is accumulated in the same order.
+#
+# A row whose smallest and largest spacing give different windows, or
+# whose spacing is not finite and positive, is marked ROW_PER_POINT and
+# keeps the 1.0 behaviour of rebuilding the window at each point. A grid
+# whose spacing varies along x (not lat/lon) therefore falls back to the
+# 1.0 arithmetic automatically.
+
+ROW_SKIP = -1        # row is in the excluded border; nothing computed
+ROW_PER_POINT = -2   # window rebuilt per point, exactly as in 1.0 "varying"
+
+
+@dataclass(frozen=True, eq=False)
+class _TextureKernels2D:
+    """
+    The windows refl_texture_2d() needs for one grid, resolved once.
+
+    Kernel `k` occupies ``k_jdx[k_ptr[k]:k_ptr[k + 1]]`` (and the same
+    slice of ``k_jdy``), in the order the 1.0 builders produce. Row `iy`
+    uses kernel ``row_kernel[iy]``, or ROW_SKIP / ROW_PER_POINT. Texture
+    and coverage are computed for rows with ``row_kernel >= 0`` or
+    ROW_PER_POINT, and for columns ``ix0 <= ix < ix1``: the same region
+    the 1.0 cores computed for the same kernel_mode.
+
+    ``scale_y``/``scale_x`` are the spacings (km) the plane-fit
+    coordinates are built from at each point: the median spacing
+    broadcast over the grid in "uniform" mode, the local spacing in
+    "varying" mode. Either may be a read-only broadcast view.
+    """
+    kernel_mode: str
+    radius_km: float
+    shape: tuple
+    k_ptr: np.ndarray
+    k_jdx: np.ndarray
+    k_jdy: np.ndarray
+    row_kernel: np.ndarray
+    ix0: int
+    ix1: int
+    scale_y: np.ndarray
+    scale_x: np.ndarray
+    max_kernel: int
+
+    @property
+    def n_kernels(self) -> int:
+        """Number of distinct windows stored."""
+        return len(self.k_ptr) - 1
+
+    @property
+    def n_rows_per_point(self) -> int:
+        """Rows that rebuild the window at every point (1.0 behaviour)."""
+        return int(np.count_nonzero(self.row_kernel == ROW_PER_POINT))
+
+
+def _nanmedian_all(a: np.ndarray) -> float:
+    """
+    ``float(np.nanmedian(a))`` over every element, without materialising
+    a broadcast view.
+
+    A stride-0 axis repeats every underlying value the same number of
+    times, and repeating each value of a set m times leaves its median
+    unchanged (the two middle positions of the repeated set fall on the
+    same one or two underlying values), so the median is taken over the
+    underlying values only. Arrays with no stride-0 axis are passed to
+    np.nanmedian unchanged.
+    """
+    a = np.asarray(a)
+    idx = tuple(0 if (stride == 0 and n > 1) else slice(None)
+                for stride, n in zip(a.strides, a.shape))
+    return float(np.nanmedian(a[idx]))
+
+
+@njit(cache=True)
+def _max_positive(arr: np.ndarray) -> float:
+    """Largest strictly positive value in `arr`, or NaN if there is none."""
+    best = -np.inf
+    for v in arr.flat:
+        if v > 0.0 and v > best:
+            best = v
+    if best == -np.inf:
+        return np.nan
+    return best
+
+
+@njit(cache=True)
+def _row_spacing_range(dy: np.ndarray, dx: np.ndarray,
+                       iy0: int, iy1: int, ix0: int, ix1: int):
+    """
+    Per row iy0 <= iy < iy1, the smallest and largest dy and dx over
+    columns ix0 <= ix < ix1, and whether every value there is finite and
+    positive (`ok`). Rows that are not ok fall back to per-point windows.
+    """
+    n = iy1 - iy0
+    ok = np.ones(n, dtype=np.bool_)
+    dy_lo = np.empty(n, dtype=np.float64)
+    dy_hi = np.empty(n, dtype=np.float64)
+    dx_lo = np.empty(n, dtype=np.float64)
+    dx_hi = np.empty(n, dtype=np.float64)
+    for r in range(n):
+        iy = iy0 + r
+        ylo = np.inf
+        yhi = -np.inf
+        xlo = np.inf
+        xhi = -np.inf
+        good = True
+        for ix in range(ix0, ix1):
+            a = dy[iy, ix]
+            b = dx[iy, ix]
+            # NaN fails every comparison, so it is caught here too.
+            if not (a > 0.0 and a < np.inf and b > 0.0 and b < np.inf):
+                good = False
+                break
+            if a < ylo:
+                ylo = a
+            if a > yhi:
+                yhi = a
+            if b < xlo:
+                xlo = b
+            if b > xhi:
+                xhi = b
+        ok[r] = good
+        dy_lo[r] = ylo
+        dy_hi[r] = yhi
+        dx_lo[r] = xlo
+        dx_hi[r] = xhi
+    return ok, dy_lo, dy_hi, dx_lo, dx_hi
+
+
+def _resolve_radius_km(texture_radius) -> float:
+    """refl_texture_2d's texture_radius (float km or length WindowSpec) in km."""
+    if isinstance(texture_radius, (int, float)):
+        return float(texture_radius)
+    if isinstance(texture_radius, WindowSpec):
+        if texture_radius.is_pixel:
+            raise ValueError(
+                "refl_texture_2d requires a physical (km) radius, not a "
+                "bare pixel-count WindowSpec. Pass a float (km) or "
+                "WindowSpec((radius, 'km'))."
+            )
+        # WindowSpec stores its physical size internally in base units
+        # (metres for length); convert to km for this function's use.
+        return texture_radius._base_value / 1000.0
+    return float(texture_radius)
+
+
+def _prepare_texture_2d(radius_km: float,
+                        dy: np.ndarray,
+                        dx: np.ndarray,
+                        kernel_mode: str) -> _TextureKernels2D:
+    """
+    Resolve the windows refl_texture_2d() uses on a (ny, nx) grid.
+
+    "uniform": one window from the median dy/dx, exactly as the 1.0
+    uniform path built it, used by every row; the border is that window's
+    own half-width. "varying": one window per row wherever a row's
+    spacing admits only one window (see the section comment above), and
+    ROW_PER_POINT elsewhere; the border is the worst-case half-width over
+    the whole grid, as in the 1.0 varying path.
+
+    Depends only on the grid, never on reflectivity, so it can be built
+    once and reused for every frame on a fixed grid (see
+    eccopy2d_h.prepare_grid()).
+    """
+    if kernel_mode not in ("uniform", "varying"):
+        raise ValueError(
+            f"kernel_mode must be 'uniform' or 'varying', got {kernel_mode!r}"
+        )
+    dy = np.asarray(dy, dtype=float)
+    dx = np.asarray(dx, dtype=float)
+    if dy.ndim != 2 or dy.shape != dx.shape:
+        raise ValueError(
+            f"dy and dx must be 2-D arrays of the same shape; got "
+            f"dy.shape={dy.shape}, dx.shape={dx.shape}"
+        )
+    ny, nx = dy.shape
+
+    if kernel_mode == "uniform":
+        # Single representative dx_km/dy_km for the whole grid - matches
+        # LROSE's own mean-latitude approach for lat/lon grids.
+        dy_km = _nanmedian_all(dy)
+        dx_km = _nanmedian_all(dx)
+        jdx, jdy, _, _, nx_tex, ny_tex = _build_kernel_offsets_uniform_arrays(
+            radius_km, dx_km, dy_km)
+        row_kernel = np.full(ny, ROW_SKIP, dtype=np.int64)
+        if ny - ny_tex > ny_tex:
+            row_kernel[ny_tex:ny - ny_tex] = 0
+        return _TextureKernels2D(
+            kernel_mode="uniform", radius_km=float(radius_km), shape=(ny, nx),
+            k_ptr=np.array([0, len(jdx)], dtype=np.int64),
+            k_jdx=jdx, k_jdy=jdy, row_kernel=row_kernel,
+            ix0=int(nx_tex), ix1=int(nx - nx_tex),
+            scale_y=np.broadcast_to(np.float64(dy_km), (ny, nx)),
+            scale_x=np.broadcast_to(np.float64(dx_km), (ny, nx)),
+            max_kernel=int(len(jdx)),
+        )
+
+    # --- kernel_mode == "varying" ---
+    max_nx_tex, max_ny_tex = _max_half_width(radius_km, dx, dy)
+
+    # Warn if the texture radius is smaller than the local grid spacing
+    # anywhere in the domain - the kernel degenerates to just the center
+    # point there, making texture meaningless (always 0) at those
+    # locations regardless of kernel_mode.
+    coarsest_dx = _max_positive(dx)
+    coarsest_dy = _max_positive(dy)
+    if (np.isfinite(coarsest_dx) and coarsest_dx > radius_km) or \
+       (np.isfinite(coarsest_dy) and coarsest_dy > radius_km):
+        warnings.warn(
+            f"texture_radius ({radius_km:.2f} km) is smaller than the "
+            f"local grid spacing at some points (max dx={coarsest_dx:.2f} "
+            f"km, max dy={coarsest_dy:.2f} km). At those points the "
+            f"kernel degenerates to a single cell and texture will be "
+            f"exactly 0 there (no meaningful neighbourhood exists). "
+            f"Use a larger texture_radius or coarsen the grid for "
+            f"physically meaningful results everywhere.",
+            stacklevel=3,
+        )
+
+    iy0, iy1 = int(max_ny_tex), int(ny - max_ny_tex)
+    ix0, ix1 = int(max_nx_tex), int(nx - max_nx_tex)
+    row_kernel = np.full(ny, ROW_SKIP, dtype=np.int64)
+    jdx_parts, jdy_parts = [], []
+    seen = {}
+    if iy1 > iy0 and ix1 > ix0:
+        ok, dy_lo, dy_hi, dx_lo, dx_hi = _row_spacing_range(
+            dy, dx, iy0, iy1, ix0, ix1)
+        for r in range(iy1 - iy0):
+            if not ok[r]:
+                row_kernel[iy0 + r] = ROW_PER_POINT
+                continue
+            jdx_a, jdy_a, _, _, _, _ = _point_kernel_offsets_arrays(
+                radius_km, dx_lo[r], dy_lo[r])
+            jdx_b, jdy_b, _, _, _, _ = _point_kernel_offsets_arrays(
+                radius_km, dx_hi[r], dy_hi[r])
+            if not (np.array_equal(jdx_a, jdx_b) and np.array_equal(jdy_a, jdy_b)):
+                row_kernel[iy0 + r] = ROW_PER_POINT
+                continue
+            key = (jdx_a.tobytes(), jdy_a.tobytes())
+            k = seen.get(key)
+            if k is None:
+                k = len(jdx_parts)
+                seen[key] = k
+                jdx_parts.append(jdx_a)
+                jdy_parts.append(jdy_a)
+            row_kernel[iy0 + r] = k
+
+    sizes = [len(p) for p in jdx_parts]
+    k_ptr = np.zeros(len(sizes) + 1, dtype=np.int64)
+    k_ptr[1:] = np.cumsum(sizes) if sizes else []
+    k_jdx = np.concatenate(jdx_parts) if jdx_parts else np.empty(0, np.int64)
+    k_jdy = np.concatenate(jdy_parts) if jdy_parts else np.empty(0, np.int64)
+    # Per-point rows can need a larger window than any stored one; the
+    # finest spacing anywhere bounds it.
+    max_kernel = max(sizes) if sizes else 0
+    if np.any(row_kernel == ROW_PER_POINT):
+        max_kernel = max(max_kernel,
+                         (2 * max_nx_tex + 1) * (2 * max_ny_tex + 1))
+    return _TextureKernels2D(
+        kernel_mode="varying", radius_km=float(radius_km), shape=(ny, nx),
+        k_ptr=k_ptr, k_jdx=k_jdx.astype(np.int64), k_jdy=k_jdy.astype(np.int64),
+        row_kernel=row_kernel, ix0=ix0, ix1=ix1,
+        scale_y=dy, scale_x=dx, max_kernel=int(max_kernel),
+    )
+
+
+@njit(cache=True)
+def _fraction_active_rows(dbz_col_max: np.ndarray,
+                          min_valid_dbz: float,
+                          k_ptr: np.ndarray, k_jdx: np.ndarray,
+                          k_jdy: np.ndarray, row_kernel: np.ndarray,
+                          scale_y: np.ndarray, scale_x: np.ndarray,
+                          radius_km: float,
+                          ix0: int, ix1: int,
+                          row_start: int, row_stop: int,
+                          fraction: np.ndarray) -> None:
+    """
+    Coverage fraction for rows row_start <= iy < row_stop, written into
+    `fraction` in place. Same count and division as
+    _compute_fraction_active_core() (a stored window) or
+    _compute_fraction_active_varying() (a ROW_PER_POINT row).
+    """
+    for iy in range(row_start, row_stop):
+        kb = row_kernel[iy]
+        if kb == ROW_SKIP:
+            continue
+        if kb >= 0:
+            # Slice the stored window rather than indexing k_jdx[s:e] with
+            # a loop from s: a loop index that starts at 0 lets Numba drop
+            # its negative-index check on every read (~2x faster here).
+            jdx_arr = k_jdx[k_ptr[kb]:k_ptr[kb + 1]]
+            jdy_arr = k_jdy[k_ptr[kb]:k_ptr[kb + 1]]
+            n_kernel = len(jdx_arr)
+            if n_kernel == 0:
+                continue
+            for ix in range(ix0, ix1):
+                count = 0
+                for k in range(n_kernel):
+                    if dbz_col_max[iy + jdy_arr[k], ix + jdx_arr[k]] >= min_valid_dbz:
+                        count += 1
+                fraction[iy, ix] = count / n_kernel
+        else:
+            for ix in range(ix0, ix1):
+                jdx_arr, jdy_arr, _, _, _, _ = _point_kernel_offsets_arrays(
+                    radius_km, scale_x[iy, ix], scale_y[iy, ix])
+                n_kernel = len(jdx_arr)
+                if n_kernel == 0:
+                    continue
+                count = 0
+                for k in range(n_kernel):
+                    if dbz_col_max[iy + jdy_arr[k], ix + jdx_arr[k]] >= min_valid_dbz:
+                        count += 1
+                fraction[iy, ix] = count / n_kernel
+
+
+@njit(cache=True)
+def _texture_at_point(dbz_level, iy, ix, jdx, jdy, dxp, dyp,
+                      base_dbz, min_pts_texture, min_pts_fit,
+                      vals, vxx, vyy) -> float:
+    """
+    Texture at one point from the window (jdx, jdy), or NaN where the 1.0
+    cores leave texture missing.
+
+    Line-for-line the per-point body of _compute_texture_one_level_core()
+    (see its docstring for the plane-fit notes): the same gather order,
+    the same sums in the same order, the same clamps. The only difference
+    is that the plane-fit coordinates are formed here, as jdx*dxp and
+    jdy*dyp, instead of being read from a precomputed xx/yy array; they
+    are the same products the 1.0 kernel builders formed.
+    """
+    n_kernel = len(jdx)
+    count = 0
+    sum_dbz = 0.0
+    for k in range(n_kernel):
+        v = dbz_level[iy + jdy[k], ix + jdx[k]]
+        if not np.isnan(v):
+            vals[count] = v
+            vxx[count] = jdx[k] * dxp
+            vyy[count] = jdy[k] * dyp
+            sum_dbz += v
+            count += 1
+
+    if count < min_pts_texture:
+        return np.nan
+
+    mean_dbz = sum_dbz / count
+    if mean_dbz < 1.0:
+        mean_dbz = 1.0
+
+    if count >= min_pts_fit:
+        Sx = 0.0; Sy = 0.0; Sxx = 0.0; Syy = 0.0; Sxy = 0.0
+        Sz = 0.0; Sxz = 0.0; Syz = 0.0
+        for i in range(count):
+            x = vxx[i]; y = vyy[i]; z = vals[i]
+            Sx += x; Sy += y
+            Sxx += x * x; Syy += y * y; Sxy += x * y
+            Sz += z; Sxz += x * z; Syz += y * z
+        n = float(count)
+
+        m00 = Sxx; m01 = Sxy; m02 = Sx
+        m10 = Sxy; m11 = Syy; m12 = Sy
+        m20 = Sx;  m21 = Sy;  m22 = n
+        b0 = Sxz; b1 = Syz; b2 = Sz
+
+        det = (m00 * (m11 * m22 - m12 * m21)
+               - m01 * (m10 * m22 - m12 * m20)
+               + m02 * (m10 * m21 - m11 * m20))
+
+        if abs(det) > 1e-12:
+            aa = (b0 * (m11 * m22 - m12 * m21)
+                  - m01 * (b1 * m22 - m12 * b2)
+                  + m02 * (b1 * m21 - m11 * b2)) / det
+            bb = (m00 * (b1 * m22 - m12 * b2)
+                  - b0 * (m10 * m22 - m12 * m20)
+                  + m02 * (m10 * b2 - b1 * m20)) / det
+            for i in range(count):
+                vals[i] -= aa * vxx[i] + bb * vyy[i]
+        # else: singular system - skip detrending, as in 1.0.
+
+    sum_sq = 0.0
+    sum_sq2 = 0.0
+    nn = 0.0
+    for i in range(count):
+        val = vals[i] - base_dbz
+        if val < 1.0:
+            val = 1.0
+        dbz_sq = val * val
+        sum_sq += dbz_sq
+        sum_sq2 += dbz_sq * dbz_sq
+        nn += 1.0
+
+    n_missing = n_kernel - count
+    if n_missing > 0:
+        min_sq = mean_dbz * mean_dbz
+        sum_sq += n_missing * min_sq
+        sum_sq2 += n_missing * min_sq * min_sq
+        nn += n_missing
+
+    if nn < 1:
+        return np.nan
+
+    mean_sq = sum_sq / nn
+    var = sum_sq2 / nn - mean_sq * mean_sq
+    if var < 0.0:
+        var = 0.0
+    return np.sqrt(np.sqrt(var))
+
+
+@njit(cache=True)
+def _texture_rows(dbz_level: np.ndarray,
+                  fraction_active: np.ndarray,
+                  k_ptr: np.ndarray, k_jdx: np.ndarray,
+                  k_jdy: np.ndarray, row_kernel: np.ndarray,
+                  scale_y: np.ndarray, scale_x: np.ndarray,
+                  radius_km: float,
+                  base_dbz: float, min_frac_texture: float,
+                  min_frac_fit: float,
+                  ix0: int, ix1: int,
+                  row_start: int, row_stop: int,
+                  max_kernel: int,
+                  texture: np.ndarray) -> None:
+    """
+    Texture for rows row_start <= iy < row_stop of one level, written into
+    `texture` (pre-filled with NaN) in place. Per point, identical to
+    _compute_texture_one_level_core() (a stored window) or
+    _compute_texture_one_level_varying() (a ROW_PER_POINT row).
+    """
+    vals = np.empty(max(max_kernel, 1), dtype=np.float64)
+    vxx = np.empty(max(max_kernel, 1), dtype=np.float64)
+    vyy = np.empty(max(max_kernel, 1), dtype=np.float64)
+
+    for iy in range(row_start, row_stop):
+        kb = row_kernel[iy]
+        if kb == ROW_SKIP:
+            continue
+        if kb >= 0:
+            _texture_row_stored(
+                dbz_level, fraction_active, iy,
+                k_jdx[k_ptr[kb]:k_ptr[kb + 1]], k_jdy[k_ptr[kb]:k_ptr[kb + 1]],
+                scale_y, scale_x, base_dbz, min_frac_texture, min_frac_fit,
+                ix0, ix1, vals, vxx, vyy, texture)
+        else:
+            _texture_row_per_point(
+                dbz_level, fraction_active, iy, radius_km,
+                scale_y, scale_x, base_dbz, min_frac_texture, min_frac_fit,
+                ix0, ix1, vals, vxx, vyy, texture)
+
+
+# The two row bodies are separate functions so that each calls
+# _texture_at_point() from exactly one place, which lets LLVM inline it;
+# with two call sites in one function it did not, costing ~25%.
+
+@njit(cache=True)
+def _texture_row_stored(dbz_level, fraction_active, iy, jdx_arr, jdy_arr,
+                        scale_y, scale_x, base_dbz, min_frac_texture,
+                        min_frac_fit, ix0, ix1, vals, vxx, vyy, texture):
+    """One row of _texture_rows() using a stored window."""
+    n_kernel = len(jdx_arr)
+    if n_kernel == 0:
+        return
+    min_pts_texture = int(min_frac_texture * n_kernel + 0.5)
+    min_pts_fit = int(min_frac_fit * n_kernel + 0.5)
+    for ix in range(ix0, ix1):
+        if fraction_active[iy, ix] < min_frac_texture:
+            continue
+        if np.isnan(dbz_level[iy, ix]):
+            continue
+        tex = _texture_at_point(
+            dbz_level, iy, ix, jdx_arr, jdy_arr,
+            scale_x[iy, ix], scale_y[iy, ix], base_dbz,
+            min_pts_texture, min_pts_fit, vals, vxx, vyy)
+        if not np.isnan(tex):
+            texture[iy, ix] = tex
+
+
+@njit(cache=True)
+def _texture_row_per_point(dbz_level, fraction_active, iy, radius_km,
+                           scale_y, scale_x, base_dbz, min_frac_texture,
+                           min_frac_fit, ix0, ix1, vals, vxx, vyy, texture):
+    """One ROW_PER_POINT row of _texture_rows(): the 1.0 varying body."""
+    for ix in range(ix0, ix1):
+        if fraction_active[iy, ix] < min_frac_texture:
+            continue
+        if np.isnan(dbz_level[iy, ix]):
+            continue
+        dxp = scale_x[iy, ix]
+        dyp = scale_y[iy, ix]
+        jdx_arr, jdy_arr, _, _, _, _ = _point_kernel_offsets_arrays(
+            radius_km, dxp, dyp)
+        n_kernel = len(jdx_arr)
+        if n_kernel == 0:
+            continue
+        min_pts_texture = int(min_frac_texture * n_kernel + 0.5)
+        min_pts_fit = int(min_frac_fit * n_kernel + 0.5)
+        tex = _texture_at_point(
+            dbz_level, iy, ix, jdx_arr, jdy_arr,
+            dxp, dyp, base_dbz, min_pts_texture, min_pts_fit,
+            vals, vxx, vyy)
+        if not np.isnan(tex):
+            texture[iy, ix] = tex
+
+
 def refl_texture_2d(dbz: np.ndarray,
                     texture_radius: Union["WindowSpec", float],
                     dy: np.ndarray,
@@ -1236,15 +1773,19 @@ def refl_texture_2d(dbz: np.ndarray,
         hundred km) or any grid where spacing doesn't vary much.
 
     kernel_mode="varying"
-        Rebuilds the kernel from the LOCAL dy[y,x]/dx[y,x] at every
-        single grid point, so the kernel's physical footprint stays
-        correct everywhere regardless of domain size. This is NOT what
-        LROSE does, and has not been validated against LROSE output -
-        it is a genuine algorithmic extension for domains where the
-        single-kernel approximation breaks down (e.g. continental or
-        global lat/lon grids). Substantially slower: a new kernel is
-        built and a new plane fit performed at every point, rather than
-        reusing one fixed kernel.
+        Resolves the kernel from the LOCAL dy[y,x]/dx[y,x] at every
+        grid point, so the kernel's physical footprint stays correct
+        everywhere regardless of domain size. This is NOT what LROSE
+        does, and has not been validated against LROSE output - it is a
+        genuine algorithmic extension for domains where the single-
+        kernel approximation breaks down (e.g. continental or global
+        lat/lon grids). Each distinct kernel is built once and reused:
+        a row whose spacing admits only one kernel - every row of a
+        regular lat/lon grid, whose spacing changes only with latitude -
+        shares it, and costs about what "uniform" does. A row whose
+        spacing changes the kernel along the row rebuilds it at every
+        point, as EccoPy 1.0 did everywhere, which is much slower. The
+        results are identical to 1.0's either way.
 
     Parameters
     ----------
@@ -1274,6 +1815,11 @@ def refl_texture_2d(dbz: np.ndarray,
         )
 
     dbz = np.asarray(dbz, dtype=float)
+    if dbz.ndim != 3:
+        raise ValueError(
+            f"refl_texture_2d expects a 3-D (nz, ny, nx) dbz array; "
+            f"got shape {dbz.shape}"
+        )
     nz, ny, nx = dbz.shape
     dy = np.asarray(dy, dtype=float)
     dx = np.asarray(dx, dtype=float)
@@ -1281,6 +1827,36 @@ def refl_texture_2d(dbz: np.ndarray,
         raise ValueError(
             f"dy/dx must have shape (ny, nx) = {(ny, nx)}; "
             f"got dy.shape={dy.shape}, dx.shape={dx.shape}"
+        )
+
+    radius_km = _resolve_radius_km(texture_radius)
+    kernels = _prepare_texture_2d(radius_km, dy, dx, kernel_mode)
+    return _refl_texture_2d_prepared(
+        dbz, kernels, base_dbz=base_dbz, min_valid_dbz=min_valid_dbz,
+        min_frac_texture=min_frac_texture, min_frac_fit=min_frac_fit,
+        n_threads=n_threads,
+    )
+
+
+def _refl_texture_2d_prepared(dbz: np.ndarray,
+                              kernels: _TextureKernels2D,
+                              base_dbz: float = 0.0,
+                              min_valid_dbz: float = 0.0,
+                              min_frac_texture: float = 0.25,
+                              min_frac_fit: float = 0.67,
+                              n_threads: int = 1) -> tuple:
+    """
+    refl_texture_2d() on windows already resolved by _prepare_texture_2d().
+
+    `dbz` is (nz, ny, nx) with (ny, nx) == kernels.shape. Returns
+    (texture, fraction_active) exactly as refl_texture_2d() does.
+    """
+    dbz = np.asarray(dbz, dtype=float)
+    nz, ny, nx = dbz.shape
+    if (ny, nx) != tuple(kernels.shape):
+        raise ValueError(
+            f"dbz grid {(ny, nx)} does not match the prepared grid "
+            f"{tuple(kernels.shape)}"
         )
 
     # Null out dbz below min_valid_dbz before any downstream computation.
@@ -1296,103 +1872,37 @@ def refl_texture_2d(dbz: np.ndarray,
     if min_valid_dbz > -np.inf:
         dbz = np.where(dbz < min_valid_dbz, np.nan, dbz)
 
-    # Resolve the texture radius in km.
-    from ..params.window import WindowSpec as _WS
-    if isinstance(texture_radius, (int, float)):
-        radius_km = float(texture_radius)
-    elif isinstance(texture_radius, _WS):
-        if texture_radius.is_pixel:
-            raise ValueError(
-                "refl_texture_2d requires a physical (km) radius, not a "
-                "bare pixel-count WindowSpec. Pass a float (km) or "
-                "WindowSpec((radius, 'km'))."
-            )
-        # WindowSpec stores its physical size internally in base units
-        # (metres for length); convert to km for this function's use.
-        radius_km = texture_radius._base_value / 1000.0
-    else:
-        radius_km = float(texture_radius)
-
-    dbz_yx = np.transpose(dbz, (1, 2, 0))  # (ny, nx, nz)
     with warnings.catch_warnings():
         # An all-NaN column (no valid data at any level) is expected and
         # already handled below (replaced with -9999.0); suppress the
         # resulting "All-NaN slice encountered" RuntimeWarning from numpy.
         warnings.filterwarnings("ignore", message="All-NaN slice encountered")
-        dbz_col_max = np.nanmax(dbz_yx, axis=2)
+        dbz_col_max = np.nanmax(dbz, axis=0)
     dbz_col_max = np.where(np.isnan(dbz_col_max), -9999.0, dbz_col_max)
 
-    if kernel_mode == "uniform":
-        # Single representative dx_km/dy_km for the whole grid - matches
-        # LROSE's own mean-latitude approach for lat/lon grids.
-        dy_km = float(np.nanmedian(dy))
-        dx_km = float(np.nanmedian(dx))
+    k = kernels
+    fraction_active = np.zeros((ny, nx), dtype=np.float64)
+    _fraction_active_rows(
+        dbz_col_max, float(min_valid_dbz), k.k_ptr, k.k_jdx, k.k_jdy,
+        k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
+        k.ix0, k.ix1, 0, ny, fraction_active,
+    )
 
-        # Built once as typed arrays (not the list-of-tuples form used
-        # by eccopy.core.debug) and reused across every z-level below -
-        # avoids rebuilding/reconverting the kernel per level.
-        jdx_arr, jdy_arr, xx_arr, yy_arr, nx_tex, ny_tex = (
-            _build_kernel_offsets_uniform_arrays(radius_km, dx_km, dy_km)
+    texture = np.full((nz, ny, nx), np.nan, dtype=np.float64)
+
+    def _process_level(iz):
+        _texture_rows(
+            dbz[iz], fraction_active, k.k_ptr, k.k_jdx, k.k_jdy,
+            k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
+            float(base_dbz), float(min_frac_texture), float(min_frac_fit),
+            k.ix0, k.ix1, 0, ny, k.max_kernel, texture[iz],
         )
 
-        fraction_active = _compute_fraction_active_core(
-            dbz_col_max, jdx_arr, jdy_arr, nx_tex, ny_tex, min_valid_dbz
-        )
-
-        def _process_level(iz):
-            level = dbz_yx[:, :, iz].copy()
-            t = _compute_texture_one_level_core(
-                level, fraction_active, jdx_arr, jdy_arr, xx_arr, yy_arr,
-                nx_tex, ny_tex, base_dbz, min_frac_texture, min_frac_fit
-            )
-            return iz, t
-
-    else:  # kernel_mode == "varying"
-        max_nx_tex, max_ny_tex = _max_half_width(radius_km, dx, dy)
-
-        # Warn if the texture radius is smaller than the local grid
-        # spacing anywhere in the domain - the kernel degenerates to just
-        # the center point there, making texture meaningless (always 0)
-        # at those locations regardless of kernel_mode.
-        coarsest_dx = float(np.nanmax(dx[dx > 0])) if np.any(dx > 0) else np.nan
-        coarsest_dy = float(np.nanmax(dy[dy > 0])) if np.any(dy > 0) else np.nan
-        if (np.isfinite(coarsest_dx) and coarsest_dx > radius_km) or \
-           (np.isfinite(coarsest_dy) and coarsest_dy > radius_km):
-            warnings.warn(
-                f"texture_radius ({radius_km:.2f} km) is smaller than the "
-                f"local grid spacing at some points (max dx={coarsest_dx:.2f} "
-                f"km, max dy={coarsest_dy:.2f} km). At those points the "
-                f"kernel degenerates to a single cell and texture will be "
-                f"exactly 0 there (no meaningful neighbourhood exists). "
-                f"Use a larger texture_radius or coarsen the grid for "
-                f"physically meaningful results everywhere.",
-                stacklevel=2,
-            )
-
-        fraction_active = _compute_fraction_active_varying(
-            dbz_col_max, radius_km, dx, dy, min_valid_dbz,
-            max_nx_tex, max_ny_tex,
-        )
-
-        def _process_level(iz):
-            level = dbz_yx[:, :, iz].copy()
-            t = _compute_texture_one_level_varying(
-                level, fraction_active, radius_km, dx, dy,
-                base_dbz, min_frac_texture, min_frac_fit,
-                max_nx_tex, max_ny_tex,
-            )
-            return iz, t
-
-    texture_yx = np.full((ny, nx, nz), np.nan, dtype=float)
-
-    if n_threads > 1:
+    if n_threads > 1 and nz > 1:
         with ThreadPoolExecutor(max_workers=n_threads) as ex:
-            for iz, t in ex.map(_process_level, range(nz)):
-                texture_yx[:, :, iz] = t
+            list(ex.map(_process_level, range(nz)))
     else:
         for iz in range(nz):
-            _, t = _process_level(iz)
-            texture_yx[:, :, iz] = t
+            _process_level(iz)
 
-    texture = np.transpose(texture_yx, (2, 0, 1))  # (nz, ny, nx)
     return texture, fraction_active

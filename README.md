@@ -167,6 +167,32 @@ differ, and neither is a ground truth for the other - `"uniform"` reproduces
 the reference, `"varying"` is arguably closer to the physical intent. Treat
 any comparison between them as a sensitivity study.
 
+In `eccopy2d_h` and `eccopy3d`, `"varying"` builds each distinct window once
+and reuses it. On a regular lat/lon grid the window depends only on latitude
+(the full MRMS CONUS grid needs 23 windows at 7 km), so `"varying"` costs
+about what `"uniform"` does. Where spacing also varies along x, the window is
+rebuilt at every point, as EccoPy 1.0 did everywhere, which is much slower.
+The results are the same either way.
+
+### Fixed grids
+
+For a stream of frames on one grid, resolve the grid once with
+`prepare_grid()` and pass it to every call:
+
+```python
+from eccopy import eccopy2d_h
+
+grid = eccopy2d_h.prepare_grid(dy_km, dx_km, coord_mode="spacing",
+                               window=WindowSpec((7, "km")),
+                               kernel_mode="varying")
+for dbz in frames:
+    result = eccopy2d_h.run(dbz, grid=grid)
+```
+
+`run(dbz, grid=grid)` returns exactly what `run()` returns when given the
+same coordinates and settings directly; the grid saves resolving them again
+on every call.
+
 ## Parameters
 
 Defaults come from the reference implementations. Columns mark which modules
@@ -267,7 +293,7 @@ Every module takes `window`, `coord_mode`, `kernel_mode` and
 |---|---|
 | `eccopy1d` | `min_convective_length` |
 | `eccopy2d_v` | `height`, `melt`, `temp`, `topo`, `remove_surface_echo` |
-| `eccopy2d_h` | `min_convective_area`, `n_threads` |
+| `eccopy2d_h` | `min_convective_area`, `n_threads`, `grid` |
 | `eccopy3d` | `height`, `temp`, `terrain_ht`, `n_threads`, `levels` |
 
 ## Performance
@@ -275,8 +301,10 @@ Every module takes `window`, `coord_mode`, `kernel_mode` and
 Every hot loop - the sliding-window texture cores, the per-level texture
 computation, coverage-fraction accounting, and isotherm-height search - is
 JIT-compiled with [Numba](https://numba.pydata.org). Each compiled routine is
-cross-validated against a frozen pure-Python reference in the test suite, so
-the acceleration is checked rather than assumed.
+cross-validated in the test suite against a frozen reference - pure Python,
+or, for the 2-D texture cores rewritten in 1.1, the 1.0.1 code they replaced,
+which they must match bit for bit - so the acceleration is checked rather
+than assumed.
 
 The first call in a session pays a one-off compilation cost of a few seconds.
 `eccopy2d_h` and `eccopy3d` also accept `n_threads` for the texture stage.
