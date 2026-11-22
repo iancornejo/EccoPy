@@ -303,9 +303,9 @@ def run(dbz: Union[np.ndarray, list],
         pixels become Mixed rather than Convective. None (default)
         disables this floor entirely; see module docstring.
     n_threads : int
-        Number of parallel threads for the texture computation. Has no
-        effect here since the input is a single level, but accepted for
-        API consistency with eccopy3d.
+        Threads for the texture stage, the bulk of the run time. Rows
+        are split across threads, so a single composite uses all of
+        them. Results are identical for any thread count.
     return_intermediates : bool
         If True, also compute and attach `fitted_dbz` and `detrended_dbz`
         (the plane-fit value and detrended value at each point's own
@@ -384,7 +384,7 @@ def run(dbz: Union[np.ndarray, list],
         min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
         min_frac_texture=tp.min_frac_texture,
         min_frac_fit=tp.min_frac_fit,
-        n_threads=1,
+        n_threads=n_threads,
     )
     texture = texture_3d[0]   # back to (Y, X)
 

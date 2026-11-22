@@ -1504,7 +1504,7 @@ def _prepare_texture_2d(radius_km: float,
     )
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _fraction_active_rows(dbz_col_max: np.ndarray,
                           min_valid_dbz: float,
                           k_ptr: np.ndarray, k_jdx: np.ndarray,
@@ -1553,7 +1553,7 @@ def _fraction_active_rows(dbz_col_max: np.ndarray,
                 fraction[iy, ix] = count / n_kernel
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _texture_at_point(dbz_level, iy, ix, jdx, jdy, dxp, dyp,
                       base_dbz, min_pts_texture, min_pts_fit,
                       vals, vxx, vyy) -> float:
@@ -1646,7 +1646,7 @@ def _texture_at_point(dbz_level, iy, ix, jdx, jdy, dxp, dyp,
     return np.sqrt(np.sqrt(var))
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _texture_rows(dbz_level: np.ndarray,
                   fraction_active: np.ndarray,
                   k_ptr: np.ndarray, k_jdx: np.ndarray,
@@ -1690,7 +1690,7 @@ def _texture_rows(dbz_level: np.ndarray,
 # _texture_at_point() from exactly one place, which lets LLVM inline it;
 # with two call sites in one function it did not, costing ~25%.
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _texture_row_stored(dbz_level, fraction_active, iy, jdx_arr, jdy_arr,
                         scale_y, scale_x, base_dbz, min_frac_texture,
                         min_frac_fit, ix0, ix1, vals, vxx, vyy, texture):
@@ -1713,7 +1713,7 @@ def _texture_row_stored(dbz_level, fraction_active, iy, jdx_arr, jdy_arr,
             texture[iy, ix] = tex
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _texture_row_per_point(dbz_level, fraction_active, iy, radius_km,
                            scale_y, scale_x, base_dbz, min_frac_texture,
                            min_frac_fit, ix0, ix1, vals, vxx, vyy, texture):
@@ -1801,6 +1801,9 @@ def refl_texture_2d(dbz: np.ndarray,
     min_frac_texture : float
     min_frac_fit : float
     n_threads : int
+        Threads for the computation. Rows are split into blocks that are
+        processed in parallel, so a single level (nz=1) uses every
+        thread too. Results are identical for any thread count.
     kernel_mode : {"uniform", "varying"}
         See above.
 
@@ -1882,27 +1885,45 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
 
     k = kernels
     fraction_active = np.zeros((ny, nx), dtype=np.float64)
-    _fraction_active_rows(
-        dbz_col_max, float(min_valid_dbz), k.k_ptr, k.k_jdx, k.k_jdy,
-        k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
-        k.ix0, k.ix1, 0, ny, fraction_active,
-    )
-
     texture = np.full((nz, ny, nx), np.nan, dtype=np.float64)
 
-    def _process_level(iz):
-        _texture_rows(
-            dbz[iz], fraction_active, k.k_ptr, k.k_jdx, k.k_jdy,
+    def _process_rows(rows):
+        # Coverage then texture for one block of rows, every level. Texture
+        # at (iy, ix) reads coverage only at (iy, ix) itself, so a block
+        # never waits on another; each writes only its own rows.
+        row_start, row_stop = rows
+        _fraction_active_rows(
+            dbz_col_max, float(min_valid_dbz), k.k_ptr, k.k_jdx, k.k_jdy,
             k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
-            float(base_dbz), float(min_frac_texture), float(min_frac_fit),
-            k.ix0, k.ix1, 0, ny, k.max_kernel, texture[iz],
+            k.ix0, k.ix1, row_start, row_stop, fraction_active,
         )
-
-    if n_threads > 1 and nz > 1:
-        with ThreadPoolExecutor(max_workers=n_threads) as ex:
-            list(ex.map(_process_level, range(nz)))
-    else:
         for iz in range(nz):
-            _process_level(iz)
+            _texture_rows(
+                dbz[iz], fraction_active, k.k_ptr, k.k_jdx, k.k_jdy,
+                k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
+                float(base_dbz), float(min_frac_texture), float(min_frac_fit),
+                k.ix0, k.ix1, row_start, row_stop, k.max_kernel, texture[iz],
+            )
+
+    n_threads = int(n_threads)
+    if n_threads > 1 and ny > 1:
+        with ThreadPoolExecutor(max_workers=n_threads) as ex:
+            list(ex.map(_process_rows, _row_blocks(ny, n_threads)))
+    else:
+        _process_rows((0, ny))
 
     return texture, fraction_active
+
+
+def _row_blocks(ny: int, n_threads: int, per_thread: int = 8):
+    """
+    Split rows 0..ny into contiguous blocks for n_threads workers.
+
+    Several blocks per thread, handed out as threads free up, keep the
+    load even when echo (and so work) is concentrated in a few rows. The
+    split never changes results: every point is computed independently,
+    by the same arithmetic, whichever block it falls in.
+    """
+    n_blocks = max(1, min(ny, n_threads * per_thread))
+    edges = np.linspace(0, ny, n_blocks + 1).round().astype(int)
+    return [(int(a), int(b)) for a, b in zip(edges[:-1], edges[1:]) if b > a]

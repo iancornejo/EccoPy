@@ -34,6 +34,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   copy of the 1.0.1 code on random grids, the bundled datasets and a
   CONUS-size grid. On that grid at 7 % echo cover, `"varying"` drops from
   31 s to about 6 s, the cost of `"uniform"`.
+- **`n_threads` splits rows across threads, not height levels**, and the
+  texture cores release the GIL while they run. `eccopy2d_h`, which has
+  one level, now uses every thread; before, its `n_threads` was accepted
+  but ignored. Results are identical at any thread count.
+
+### Fixed
+- **`eccopy3d`'s `n_threads` had almost no effect.** Its per-level threads
+  all waited on the GIL, which the Numba texture cores held: two threads
+  ran about 13 % faster than one. Threads now run in parallel.
 
 ## [1.0.1] - 2026-08-07
 

@@ -307,7 +307,11 @@ which they must match bit for bit - so the acceleration is checked rather
 than assumed.
 
 The first call in a session pays a one-off compilation cost of a few seconds.
-`eccopy2d_h` and `eccopy3d` also accept `n_threads` for the texture stage.
+
+`eccopy2d_h` and `eccopy3d` take `n_threads` for the texture stage, which is
+most of their run time. Rows are split across threads, so a single composite
+uses all of them, and the result is the same at any thread count. (In EccoPy
+1.0, `n_threads` did nothing for `eccopy2d_h` and very little for `eccopy3d`.)
 
 For very large grids - full-CONUS MRMS is 3500 x 7000 - process one file at a
 time and reduce as you go rather than opening many at once.
