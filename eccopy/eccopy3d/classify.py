@@ -140,7 +140,9 @@ def run(dbz: Union[np.ndarray, list],
               break down (e.g. continental-scale lat/lon grids).
     texture_params, class_params, vert_params : optional param objects
     n_threads : int
-        Parallel threads for per-level texture computation.
+        Threads for the texture stage. Rows are split across threads
+        (every level of a block of rows per task). Results are identical
+        for any thread count.
     return_intermediates : bool
         If True, also compute and attach `fitted_dbz` and `detrended_dbz`
         (the plane-fit value and detrended value at each point's own
