@@ -1519,10 +1519,31 @@ def _fraction_active_rows(dbz_col_max: np.ndarray,
     `fraction` in place. Same count and division as
     _compute_fraction_active_core() (a stored window) or
     _compute_fraction_active_varying() (a ROW_PER_POINT row).
+
+    `dbz_col_max` is the column maximum of the UNMASKED reflectivity, NaN
+    where a column has no data. The 1.0 path first masked values below
+    min_valid_dbz to NaN, took the column maximum, filled NaN with -9999,
+    and counted cells >= min_valid_dbz. A cell passes that test exactly
+    when its unmasked maximum is >= min_valid_dbz, or when the -9999 fill
+    itself passes (min_valid_dbz <= -9999, e.g. -inf) -- in which case
+    every cell counts. Testing that directly needs neither the masked
+    copy nor the filled one, and counts the same cells.
     """
+    fill_valid = -9999.0 >= min_valid_dbz
     for iy in range(row_start, row_stop):
         kb = row_kernel[iy]
         if kb == ROW_SKIP:
+            continue
+        if fill_valid:
+            # Every cell counts: count == n_kernel at every point.
+            for ix in range(ix0, ix1):
+                if kb >= 0:
+                    n_kernel = k_ptr[kb + 1] - k_ptr[kb]
+                else:
+                    n_kernel = len(_point_kernel_offsets_arrays(
+                        radius_km, scale_x[iy, ix], scale_y[iy, ix])[0])
+                if n_kernel > 0:
+                    fraction[iy, ix] = n_kernel / n_kernel
             continue
         if kb >= 0:
             # Slice the stored window rather than indexing k_jdx[s:e] with
@@ -1554,7 +1575,7 @@ def _fraction_active_rows(dbz_col_max: np.ndarray,
 
 
 @njit(cache=True, nogil=True)
-def _texture_at_point(dbz_level, iy, ix, jdx, jdy, dxp, dyp,
+def _texture_at_point(dbz_level, iy, ix, jdx, jdy, dxp, dyp, min_valid_dbz,
                       base_dbz, min_pts_texture, min_pts_fit,
                       vals, vxx, vyy) -> float:
     """
@@ -1563,17 +1584,22 @@ def _texture_at_point(dbz_level, iy, ix, jdx, jdy, dxp, dyp,
 
     Line-for-line the per-point body of _compute_texture_one_level_core()
     (see its docstring for the plane-fit notes): the same gather order,
-    the same sums in the same order, the same clamps. The only difference
-    is that the plane-fit coordinates are formed here, as jdx*dxp and
-    jdy*dyp, instead of being read from a precomputed xx/yy array; they
-    are the same products the 1.0 kernel builders formed.
+    the same sums in the same order, the same clamps. Two differences,
+    neither of which changes a value:
+      - the plane-fit coordinates are formed here, as jdx*dxp and
+        jdy*dyp, instead of being read from a precomputed xx/yy array;
+        they are the same products the 1.0 kernel builders formed;
+      - `dbz_level` is the unmasked reflectivity, and a value below
+        min_valid_dbz is skipped here exactly as the 1.0 path's NaN-masked
+        copy skipped it (see _refl_texture_2d_prepared).
     """
     n_kernel = len(jdx)
     count = 0
     sum_dbz = 0.0
     for k in range(n_kernel):
         v = dbz_level[iy + jdy[k], ix + jdx[k]]
-        if not np.isnan(v):
+        # Valid exactly where the 1.0 masked copy was not NaN.
+        if not (np.isnan(v) or v < min_valid_dbz):
             vals[count] = v
             vxx[count] = jdx[k] * dxp
             vyy[count] = jdy[k] * dyp
@@ -1652,7 +1678,7 @@ def _texture_rows(dbz_level: np.ndarray,
                   k_ptr: np.ndarray, k_jdx: np.ndarray,
                   k_jdy: np.ndarray, row_kernel: np.ndarray,
                   scale_y: np.ndarray, scale_x: np.ndarray,
-                  radius_km: float,
+                  radius_km: float, min_valid_dbz: float,
                   base_dbz: float, min_frac_texture: float,
                   min_frac_fit: float,
                   ix0: int, ix1: int,
@@ -1663,7 +1689,8 @@ def _texture_rows(dbz_level: np.ndarray,
     Texture for rows row_start <= iy < row_stop of one level, written into
     `texture` (pre-filled with NaN) in place. Per point, identical to
     _compute_texture_one_level_core() (a stored window) or
-    _compute_texture_one_level_varying() (a ROW_PER_POINT row).
+    _compute_texture_one_level_varying() (a ROW_PER_POINT row) applied to
+    the level with values below min_valid_dbz masked to NaN.
     """
     vals = np.empty(max(max_kernel, 1), dtype=np.float64)
     vxx = np.empty(max(max_kernel, 1), dtype=np.float64)
@@ -1677,13 +1704,13 @@ def _texture_rows(dbz_level: np.ndarray,
             _texture_row_stored(
                 dbz_level, fraction_active, iy,
                 k_jdx[k_ptr[kb]:k_ptr[kb + 1]], k_jdy[k_ptr[kb]:k_ptr[kb + 1]],
-                scale_y, scale_x, base_dbz, min_frac_texture, min_frac_fit,
-                ix0, ix1, vals, vxx, vyy, texture)
+                scale_y, scale_x, min_valid_dbz, base_dbz, min_frac_texture,
+                min_frac_fit, ix0, ix1, vals, vxx, vyy, texture)
         else:
             _texture_row_per_point(
                 dbz_level, fraction_active, iy, radius_km,
-                scale_y, scale_x, base_dbz, min_frac_texture, min_frac_fit,
-                ix0, ix1, vals, vxx, vyy, texture)
+                scale_y, scale_x, min_valid_dbz, base_dbz, min_frac_texture,
+                min_frac_fit, ix0, ix1, vals, vxx, vyy, texture)
 
 
 # The two row bodies are separate functions so that each calls
@@ -1692,8 +1719,9 @@ def _texture_rows(dbz_level: np.ndarray,
 
 @njit(cache=True, nogil=True)
 def _texture_row_stored(dbz_level, fraction_active, iy, jdx_arr, jdy_arr,
-                        scale_y, scale_x, base_dbz, min_frac_texture,
-                        min_frac_fit, ix0, ix1, vals, vxx, vyy, texture):
+                        scale_y, scale_x, min_valid_dbz, base_dbz,
+                        min_frac_texture, min_frac_fit, ix0, ix1,
+                        vals, vxx, vyy, texture):
     """One row of _texture_rows() using a stored window."""
     n_kernel = len(jdx_arr)
     if n_kernel == 0:
@@ -1703,11 +1731,12 @@ def _texture_row_stored(dbz_level, fraction_active, iy, jdx_arr, jdy_arr,
     for ix in range(ix0, ix1):
         if fraction_active[iy, ix] < min_frac_texture:
             continue
-        if np.isnan(dbz_level[iy, ix]):
+        c = dbz_level[iy, ix]
+        if np.isnan(c) or c < min_valid_dbz:      # centre missing (or masked)
             continue
         tex = _texture_at_point(
             dbz_level, iy, ix, jdx_arr, jdy_arr,
-            scale_x[iy, ix], scale_y[iy, ix], base_dbz,
+            scale_x[iy, ix], scale_y[iy, ix], min_valid_dbz, base_dbz,
             min_pts_texture, min_pts_fit, vals, vxx, vyy)
         if not np.isnan(tex):
             texture[iy, ix] = tex
@@ -1715,13 +1744,15 @@ def _texture_row_stored(dbz_level, fraction_active, iy, jdx_arr, jdy_arr,
 
 @njit(cache=True, nogil=True)
 def _texture_row_per_point(dbz_level, fraction_active, iy, radius_km,
-                           scale_y, scale_x, base_dbz, min_frac_texture,
-                           min_frac_fit, ix0, ix1, vals, vxx, vyy, texture):
+                           scale_y, scale_x, min_valid_dbz, base_dbz,
+                           min_frac_texture, min_frac_fit, ix0, ix1,
+                           vals, vxx, vyy, texture):
     """One ROW_PER_POINT row of _texture_rows(): the 1.0 varying body."""
     for ix in range(ix0, ix1):
         if fraction_active[iy, ix] < min_frac_texture:
             continue
-        if np.isnan(dbz_level[iy, ix]):
+        c = dbz_level[iy, ix]
+        if np.isnan(c) or c < min_valid_dbz:      # centre missing (or masked)
             continue
         dxp = scale_x[iy, ix]
         dyp = scale_y[iy, ix]
@@ -1734,7 +1765,7 @@ def _texture_row_per_point(dbz_level, fraction_active, iy, radius_km,
         min_pts_fit = int(min_frac_fit * n_kernel + 0.5)
         tex = _texture_at_point(
             dbz_level, iy, ix, jdx_arr, jdy_arr,
-            dxp, dyp, base_dbz, min_pts_texture, min_pts_fit,
+            dxp, dyp, min_valid_dbz, base_dbz, min_pts_texture, min_pts_fit,
             vals, vxx, vyy)
         if not np.isnan(tex):
             texture[iy, ix] = tex
@@ -1749,7 +1780,8 @@ def refl_texture_2d(dbz: np.ndarray,
                     min_frac_texture: float = 0.25,
                     min_frac_fit: float = 0.67,
                     n_threads: int = 1,
-                    kernel_mode: str = "uniform") -> tuple:
+                    kernel_mode: str = "uniform",
+                    dtype=np.float64) -> tuple:
     """
     2-D circular-neighbourhood texture with planar detrend, per horizontal
     level, for EccoPy-3D / EccoPy-2D-H.
@@ -1790,12 +1822,16 @@ def refl_texture_2d(dbz: np.ndarray,
     Parameters
     ----------
     dbz : np.ndarray, shape (nz, ny, nx)
-        Reflectivity volume. NaN where missing.
+        Reflectivity volume. NaN where missing. float32 input is used as
+        is, not copied to float64: every value is promoted exactly where
+        it is read, and all sums are float64, so the result is identical
+        to passing the same values as float64.
     texture_radius : WindowSpec or float (km)
     dy, dx : np.ndarray, shape (ny, nx)
         Local point-to-point spacing in km along y and x respectively
         (e.g. from eccopy.core.coords.latlon_to_xy_spacing, or derived
-        from coordinate arrays via resolve_spacing()).
+        from coordinate arrays via resolve_spacing()). May be read-only
+        broadcast views (see latlon_grid_spacing()); they are not copied.
     base_dbz : float
     min_valid_dbz : float
     min_frac_texture : float
@@ -1806,6 +1842,12 @@ def refl_texture_2d(dbz: np.ndarray,
         thread too. Results are identical for any thread count.
     kernel_mode : {"uniform", "varying"}
         See above.
+    dtype : {np.float64, np.float32}
+        Floating type of the returned arrays. float32 halves their memory
+        and changes nothing but the final rounding of each stored value:
+        texture is still accumulated in float64, and coverage is kept in
+        float64 until the end, so which points get a texture is decided
+        exactly as in float64.
 
     Returns
     -------
@@ -1817,7 +1859,7 @@ def refl_texture_2d(dbz: np.ndarray,
             f"kernel_mode must be 'uniform' or 'varying', got {kernel_mode!r}"
         )
 
-    dbz = np.asarray(dbz, dtype=float)
+    dbz = _as_float_array(dbz)
     if dbz.ndim != 3:
         raise ValueError(
             f"refl_texture_2d expects a 3-D (nz, ny, nx) dbz array; "
@@ -1837,8 +1879,24 @@ def refl_texture_2d(dbz: np.ndarray,
     return _refl_texture_2d_prepared(
         dbz, kernels, base_dbz=base_dbz, min_valid_dbz=min_valid_dbz,
         min_frac_texture=min_frac_texture, min_frac_fit=min_frac_fit,
-        n_threads=n_threads,
+        n_threads=n_threads, dtype=dtype,
     )
+
+
+def _as_float_array(a) -> np.ndarray:
+    """`a` as float32 or float64 without copying either; anything else
+    (ints, lists, float16) is converted to float64, as 1.0 did for all."""
+    a = np.asarray(a)
+    if a.dtype not in (np.float32, np.float64):
+        a = a.astype(np.float64)
+    return a
+
+
+def _resolve_dtype(dtype) -> np.dtype:
+    dt = np.dtype(dtype)
+    if dt not in (np.float32, np.float64):
+        raise ValueError(f"dtype must be float32 or float64, got {dt}")
+    return dt
 
 
 def _refl_texture_2d_prepared(dbz: np.ndarray,
@@ -1847,14 +1905,16 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
                               min_valid_dbz: float = 0.0,
                               min_frac_texture: float = 0.25,
                               min_frac_fit: float = 0.67,
-                              n_threads: int = 1) -> tuple:
+                              n_threads: int = 1,
+                              dtype=np.float64) -> tuple:
     """
     refl_texture_2d() on windows already resolved by _prepare_texture_2d().
 
     `dbz` is (nz, ny, nx) with (ny, nx) == kernels.shape. Returns
     (texture, fraction_active) exactly as refl_texture_2d() does.
     """
-    dbz = np.asarray(dbz, dtype=float)
+    out_dtype = _resolve_dtype(dtype)
+    dbz = _as_float_array(dbz)
     nz, ny, nx = dbz.shape
     if (ny, nx) != tuple(kernels.shape):
         raise ValueError(
@@ -1862,30 +1922,42 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
             f"{tuple(kernels.shape)}"
         )
 
-    # Null out dbz below min_valid_dbz before any downstream computation.
-    # Port of ConvStratFinder::computeEchoType()'s prefiltering loop,
-    # applied once to the whole volume before column-max, fraction_active
-    # and per-level texture are computed from it. Gating only the
-    # fraction_active coverage count would leave sub-threshold values
-    # (e.g. -25 dBZ when min_valid_dbz=0) still participated as valid
-    # neighbours in the texture plane-fit/variance calc, inflating texture
-    # and convectivity near the edges of valid-data regions relative to
-    # the C++ reference. Found via SPOL LOW truth comparison: ~191k pixels
-    # where truth=Missing but EccoPy assigned a stratiform/mixed echo type.
-    if min_valid_dbz > -np.inf:
-        dbz = np.where(dbz < min_valid_dbz, np.nan, dbz)
+    # Values below min_valid_dbz are treated as missing everywhere below:
+    # in the coverage count, as texture neighbours and as the centre. Port
+    # of ConvStratFinder::computeEchoType()'s prefiltering loop, which
+    # nulls them before column-max, fraction_active and per-level texture
+    # are computed. Gating only the fraction_active coverage count would
+    # leave sub-threshold values (e.g. -25 dBZ when min_valid_dbz=0) still
+    # participating as valid neighbours in the texture plane-fit/variance
+    # calc, inflating texture and convectivity near the edges of valid-
+    # data regions relative to the C++ reference. Found via SPOL LOW truth
+    # comparison: ~191k pixels where truth=Missing but EccoPy assigned a
+    # stratiform/mixed echo type.
+    #
+    # EccoPy 1.0 did this by building a NaN-masked copy of the volume (and
+    # a -9999-filled copy of its column maximum). The cores now apply the
+    # same test as they read each value, which selects exactly the same
+    # values without either full-size copy; see _fraction_active_rows()
+    # and _texture_at_point(). min_valid_dbz = -inf masks nothing, as before.
+    min_valid_dbz = float(min_valid_dbz)
 
-    with warnings.catch_warnings():
-        # An all-NaN column (no valid data at any level) is expected and
-        # already handled below (replaced with -9999.0); suppress the
-        # resulting "All-NaN slice encountered" RuntimeWarning from numpy.
-        warnings.filterwarnings("ignore", message="All-NaN slice encountered")
-        dbz_col_max = np.nanmax(dbz, axis=0)
-    dbz_col_max = np.where(np.isnan(dbz_col_max), -9999.0, dbz_col_max)
+    if nz == 1:
+        # The column maximum of one level is that level (NaN stays NaN).
+        dbz_col_max = dbz[0]
+    else:
+        with warnings.catch_warnings():
+            # An all-NaN column (no valid data at any level) is expected;
+            # _fraction_active_rows() handles NaN. Suppress numpy's
+            # "All-NaN slice encountered" RuntimeWarning.
+            warnings.filterwarnings("ignore", message="All-NaN slice encountered")
+            dbz_col_max = np.nanmax(dbz, axis=0)
 
     k = kernels
+    # Coverage stays float64 throughout: the texture stage compares it
+    # against min_frac_texture, and that decision must not depend on the
+    # output dtype. It is converted, if asked, only on the way out.
     fraction_active = np.zeros((ny, nx), dtype=np.float64)
-    texture = np.full((nz, ny, nx), np.nan, dtype=np.float64)
+    texture = np.full((nz, ny, nx), np.nan, dtype=out_dtype)
 
     def _process_rows(rows):
         # Coverage then texture for one block of rows, every level. Texture
@@ -1893,7 +1965,7 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
         # never waits on another; each writes only its own rows.
         row_start, row_stop = rows
         _fraction_active_rows(
-            dbz_col_max, float(min_valid_dbz), k.k_ptr, k.k_jdx, k.k_jdy,
+            dbz_col_max, min_valid_dbz, k.k_ptr, k.k_jdx, k.k_jdy,
             k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
             k.ix0, k.ix1, row_start, row_stop, fraction_active,
         )
@@ -1901,8 +1973,9 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
             _texture_rows(
                 dbz[iz], fraction_active, k.k_ptr, k.k_jdx, k.k_jdy,
                 k.row_kernel, k.scale_y, k.scale_x, k.radius_km,
-                float(base_dbz), float(min_frac_texture), float(min_frac_fit),
-                k.ix0, k.ix1, row_start, row_stop, k.max_kernel, texture[iz],
+                min_valid_dbz, float(base_dbz), float(min_frac_texture),
+                float(min_frac_fit), k.ix0, k.ix1, row_start, row_stop,
+                k.max_kernel, texture[iz],
             )
 
     n_threads = int(n_threads)
@@ -1912,6 +1985,8 @@ def _refl_texture_2d_prepared(dbz: np.ndarray,
     else:
         _process_rows((0, ny))
 
+    if out_dtype != np.float64:
+        fraction_active = fraction_active.astype(out_dtype)
     return texture, fraction_active
 
 

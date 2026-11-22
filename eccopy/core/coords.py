@@ -16,6 +16,8 @@ This module provides:
   haversine_distance()   - great-circle distance between two lat/lon points
   latlon_to_xy_spacing() - convert a lat/lon grid into local dx/dy spacing
                            arrays (same shape as the input grid)
+  latlon_grid_spacing()  - the same for a regular lat/lon grid given as
+                           1-D lat/lon, as memory-free broadcast views
   resolve_spacing()       - internal: turn either a position array or a
                            pre-computed spacing array into a spacing array
 """
@@ -109,6 +111,67 @@ def latlon_to_xy_spacing(lat: np.ndarray,
         dy_km = np.concatenate([dy_inner, dy_inner[..., -1:, :]], axis=-2)
 
     return dy_km, dx_km
+
+
+def latlon_grid_spacing(lat: np.ndarray,
+                        lon: np.ndarray,
+                        radius_km: float = EARTH_RADIUS_KM
+                        ) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Spacing of a regular latitude/longitude grid, as read-only (Y, X)
+    views that cost almost no memory.
+
+    On a grid made of every combination of a 1-D `lat` and a uniformly
+    spaced 1-D `lon` -- MRMS, and most model output on a lat/lon mesh --
+    both spacings depend only on the row. latlon_to_xy_spacing() on the
+    meshgrid returns them as two full float64 arrays (about 400 MB
+    together for the 3500 x 7000 MRMS CONUS grid); this returns per-row
+    values broadcast to (Y, X) instead. Pass them to eccopy2d_h with
+    coord_mode="spacing".
+
+    Parameters
+    ----------
+    lat : np.ndarray, shape (Y,)
+        Latitude of each row, degrees, monotonic (either direction).
+    lon : np.ndarray, shape (X,)
+        Longitude of each column, degrees, uniformly spaced (to a relative
+        tolerance of 1e-6).
+    radius_km : float, default Earth's mean radius
+
+    Returns
+    -------
+    dy_km, dx_km : np.ndarray, shape (Y, X), read-only broadcast views
+        The same haversine distances latlon_to_xy_spacing() computes, taken
+        along the first column: dy_km[i] from row i to row i+1, dx_km[i]
+        from lon[0] to lon[1] at row i, with the last row repeating the
+        previous dy as there. latlon_to_xy_spacing()'s dx differs along a
+        row only by rounding (about 1e-12, relative).
+    """
+    lat = np.asarray(lat, dtype=float)
+    lon = np.asarray(lon, dtype=float)
+    if lat.ndim != 1 or lon.ndim != 1:
+        raise ValueError(
+            f"lat and lon must be 1-D (one value per row / column); got "
+            f"shapes {lat.shape} and {lon.shape}. For 2-D fields use "
+            f"latlon_to_xy_spacing()."
+        )
+    if lon.size < 2:
+        raise ValueError("lon needs at least 2 values to define a spacing")
+    dlon = np.diff(lon)
+    if not np.allclose(dlon, dlon[0], rtol=1e-6, atol=0.0):
+        raise ValueError(
+            "lon is not uniformly spaced, so dx varies along each row; use "
+            "latlon_to_xy_spacing() on the meshgrid instead."
+        )
+    dx_row = haversine_distance(lat, lon[0], lat, lon[1], radius_km)
+    if lat.size < 2:
+        dy_row = np.zeros_like(dx_row)
+    else:
+        dy_inner = haversine_distance(lat[:-1], lon[0], lat[1:], lon[0], radius_km)
+        dy_row = np.concatenate([dy_inner, dy_inner[-1:]])
+    shape = (lat.size, lon.size)
+    return (np.broadcast_to(dy_row[:, np.newaxis], shape),
+            np.broadcast_to(dx_row[:, np.newaxis], shape))
 
 
 def time_to_distance_km(time: np.ndarray,

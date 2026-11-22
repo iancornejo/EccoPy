@@ -145,8 +145,10 @@ WindowSpec(28)           # 28 samples, regardless of spacing
 ```
 
 For geographic grids, `latlon_to_xy_spacing()` converts 2-D latitude and
-longitude fields to north-south and east-west spacings, and
-`time_to_distance_km()` converts a time axis to wind-advected distance.
+longitude fields to north-south and east-west spacings. For a regular lat/lon
+grid, `latlon_grid_spacing()` gives the same spacings from 1-D latitude and
+longitude, as views that take almost no memory. `time_to_distance_km()`
+converts a time axis to wind-advected distance.
 
 ### `kernel_mode`
 
@@ -293,7 +295,7 @@ Every module takes `window`, `coord_mode`, `kernel_mode` and
 |---|---|
 | `eccopy1d` | `min_convective_length` |
 | `eccopy2d_v` | `height`, `melt`, `temp`, `topo`, `remove_surface_echo` |
-| `eccopy2d_h` | `min_convective_area`, `n_threads`, `grid` |
+| `eccopy2d_h` | `min_convective_area`, `n_threads`, `grid`, `dtype` |
 | `eccopy3d` | `height`, `temp`, `terrain_ht`, `n_threads`, `levels` |
 
 ## Performance
@@ -315,6 +317,13 @@ uses all of them, and the result is the same at any thread count. (In EccoPy
 
 For very large grids - full-CONUS MRMS is 3500 x 7000 - process one file at a
 time and reduce as you go rather than opening many at once.
+
+To keep memory down on large `eccopy2d_h` grids, pass spacing as broadcast
+views (`latlon_grid_spacing()` builds them for a lat/lon grid) and keep
+reflectivity in float32; neither changes the result. `dtype=np.float32`
+also halves the output arrays. It changes only the rounding of each stored
+value, and no echo type changed on any grid tested, but it stays opt-in
+until it has been validated more widely.
 
 ## Plotting
 
