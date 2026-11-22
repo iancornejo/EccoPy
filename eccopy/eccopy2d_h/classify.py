@@ -48,21 +48,42 @@ Typical usage
     )
     echo = result.echo_type   # shape (Y, X), values in {1, 2, 3}
     n_clumps = result.n_clumps
+
+Fixed grids
+-----------
+Everything run() derives from the coordinates -- the spacing, the texture
+radius and the windows themselves -- depends only on the grid. A caller
+classifying a stream of frames on one grid (an operational mosaic, a fixed
+radar's Cartesian grid) can resolve it once with prepare_grid() and pass
+the result to every run():
+
+    grid = eccopy2d_h.prepare_grid(dy_km, dx_km, coord_mode="spacing",
+                                   window=WindowSpec((7, 'km')),
+                                   kernel_mode="varying")
+    for dbz in frames:
+        result = eccopy2d_h.run(dbz, grid=grid)
+
+run(dbz, grid=prepare_grid(c_y, c_x, ...)) returns exactly what
+run(dbz, c_y, c_x, ...) returns: the second form builds the same grid
+internally on every call.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Union
 
 import numpy as np
 
 from ..core.coords import resolve_spacing
-from ..core.texture import refl_texture_2d
+from ..core.texture import (_TextureKernels2D, _prepare_texture_2d,
+                            _refl_texture_2d_prepared)
 from ..core.convectivity import texture_to_convectivity_linear
 from ..core.classification import assign_echo_type_2d
 from ..eccopy2d_h.clumping import find_clumps_2d
 from ..params.window import WindowSpec
 from ..params import TextureParams, ClassificationParams
+
+_DEFAULT_WINDOW = WindowSpec((7, 'km'))
 
 
 @dataclass
@@ -85,17 +106,150 @@ class Result2DH:
     detrended_dbz: Optional[np.ndarray] = None   # shape (Y, X)
 
 
+@dataclass(frozen=True, eq=False)
+class Grid2DH:
+    """
+    A (Y, X) grid resolved once for eccopy2d_h.run(); see prepare_grid().
+
+    Holds no reflectivity, so one Grid2DH serves every frame on the same
+    grid. Treat it as read-only: its arrays are shared, not copied, and
+    changing them after prepare_grid() returns invalidates the windows it
+    resolved from them.
+    """
+    shape:          tuple          # (Y, X)
+    spacing_y:      np.ndarray     # (Y, X) N-S spacing, km
+    spacing_x:      np.ndarray     # (Y, X) E-W spacing, km
+    window:         Union[WindowSpec, float]
+    texture_radius: float          # km, resolved from `window`
+    coord_mode:     str
+    kernel_mode:    str
+    _kernels:       _TextureKernels2D = field(repr=False)
+
+    @property
+    def n_windows(self) -> int:
+        """Distinct texture windows the grid uses: 1 in "uniform" mode;
+        in "varying" mode, one per distinct row window (23 on the full
+        MRMS CONUS grid at 7 km). Rows whose window varies along the row
+        are rebuilt per point and are not counted (see n_rows_per_point)."""
+        return self._kernels.n_kernels
+
+    @property
+    def n_rows_per_point(self) -> int:
+        """Rows whose spacing varies along x enough to change the window
+        within the row; these rebuild the window at every point, as in
+        EccoPy 1.0. Zero on regular lat/lon and Cartesian grids."""
+        return self._kernels.n_rows_per_point
+
+
+def _resolve_coords(coords, size, axis_2d, coord_mode, name):
+    """One coordinate argument -> spacing, as run() always resolved it:
+    a 1-D array along its own axis, a 2-D one along `axis_2d`. Returns
+    (spacing, is_1d)."""
+    arr = np.asarray(coords, dtype=float)
+    if arr.ndim == 1:
+        if arr.shape[0] != size:
+            axis = "Y" if axis_2d == 0 else "X"
+            raise ValueError(f"{name} length {arr.shape[0]} != {axis}={size}")
+        return resolve_spacing(arr, axis=0, mode=coord_mode), True
+    return resolve_spacing(arr, axis=axis_2d, mode=coord_mode), False
+
+
+def prepare_grid(coords_y: Union[np.ndarray, list],
+                 coords_x: Union[np.ndarray, list],
+                 window: Union[WindowSpec, int, float] = _DEFAULT_WINDOW,
+                 coord_mode: str = "auto",
+                 kernel_mode: str = "uniform") -> Grid2DH:
+    """
+    Resolve a fixed (Y, X) grid once, for reuse by run(dbz, grid=...).
+
+    Takes the grid arguments of run() -- with the same meanings and
+    defaults -- and does every part of run() that depends only on them:
+    spacing, the texture radius, and the texture windows. In
+    kernel_mode="varying" that last part is the one worth saving: on a
+    regular lat/lon grid the window depends only on the row, and
+    prepare_grid() finds the handful of distinct windows once (see
+    Grid2DH.n_windows).
+
+    Parameters
+    ----------
+    coords_y, coords_x, window, coord_mode, kernel_mode
+        As for run().
+
+    Returns
+    -------
+    Grid2DH
+        Pass it to run() as ``grid=``. Its shape is (len(coords_y),
+        len(coords_x)) for 1-D coordinates, or the shape of a 2-D one.
+    """
+    if kernel_mode not in ("uniform", "varying"):
+        raise ValueError(
+            f"kernel_mode must be 'uniform' or 'varying', got {kernel_mode!r}"
+        )
+    cy = np.asarray(coords_y, dtype=float)
+    cx = np.asarray(coords_x, dtype=float)
+    if cy.ndim == 2:
+        shape = cy.shape
+    elif cx.ndim == 2:
+        shape = cx.shape
+    elif cy.ndim == 1 and cx.ndim == 1:
+        shape = (cy.shape[0], cx.shape[0])
+    else:
+        raise ValueError(
+            f"coords_y must be (Y,) or (Y, X) and coords_x (X,) or (Y, X); "
+            f"got shapes {cy.shape} and {cx.shape}"
+        )
+    ny, nx = shape
+
+    # --- resolve coords -> per-point spacing (km) ---
+    sp_y, y_is_1d = _resolve_coords(cy, ny, 0, coord_mode, "coords_y")
+    if y_is_1d:
+        sp_y = np.broadcast_to(sp_y[:, np.newaxis], (ny, nx)).copy()
+    sp_x, x_is_1d = _resolve_coords(cx, nx, 1, coord_mode, "coords_x")
+    if x_is_1d:
+        sp_x = np.broadcast_to(sp_x[np.newaxis, :], (ny, nx)).copy()
+    if sp_y.shape != (ny, nx) or sp_x.shape != (ny, nx):
+        raise ValueError(
+            f"coords_y/coords_x describe different grids: spacing shapes "
+            f"{sp_y.shape} and {sp_x.shape}"
+        )
+
+    # Resolve window radius in km
+    if isinstance(window, (int, float)):
+        radius_km = float(window)
+    elif isinstance(window, WindowSpec):
+        if window.is_pixel:
+            # Convert pixel radius to km using median spacing
+            med_sp = float(np.nanmedian(np.stack([sp_y, sp_x])))
+            radius_km = window.size * med_sp
+        else:
+            if window.base_kind != "length_m":
+                raise ValueError(
+                    "eccopy2d_h texture window must be a length unit (km); "
+                    f"got unit kind '{window.base_kind}'."
+                )
+            radius_km = window.base_value / 1000.0
+    else:
+        radius_km = float(window)
+
+    kernels = _prepare_texture_2d(radius_km, sp_y, sp_x, kernel_mode)
+    return Grid2DH(shape=(ny, nx), spacing_y=sp_y, spacing_x=sp_x,
+                   window=window, texture_radius=radius_km,
+                   coord_mode=coord_mode, kernel_mode=kernel_mode,
+                   _kernels=kernels)
+
+
 def run(dbz: Union[np.ndarray, list],
-        coords_y: Union[np.ndarray, list],
-        coords_x: Union[np.ndarray, list],
-        window: Union[WindowSpec, int, float] = WindowSpec((7, 'km')),
-        coord_mode: str = "auto",
-        kernel_mode: str = "uniform",
+        coords_y: Optional[Union[np.ndarray, list]] = None,
+        coords_x: Optional[Union[np.ndarray, list]] = None,
+        window: Optional[Union[WindowSpec, int, float]] = None,
+        coord_mode: Optional[str] = None,
+        kernel_mode: Optional[str] = None,
         texture_params: Optional[TextureParams] = None,
         class_params: Optional[ClassificationParams] = None,
         min_convective_area: Optional[float] = None,
         n_threads: int = 1,
-        return_intermediates: bool = False) -> Result2DH:
+        return_intermediates: bool = False,
+        grid: Optional[Grid2DH] = None) -> Result2DH:
     """
     Run EccoPy-2D-H: 2D radial texture → convectivity → 2D dual-threshold
     clumping → echo type classification.
@@ -105,14 +259,14 @@ def run(dbz: Union[np.ndarray, list],
     dbz : array-like, shape (Y, X)
         Reflectivity, dBZ. NaN where missing.
     coords_y : array-like, shape (Y,) or (Y, X)
-        N-S position or spacing, km.
+        N-S position or spacing, km. Required unless `grid` is given.
     coords_x : array-like, shape (X,) or (Y, X)
-        E-W position or spacing, km.
-    window : WindowSpec or float (km)
+        E-W position or spacing, km. Required unless `grid` is given.
+    window : WindowSpec or float (km), default WindowSpec((7, 'km'))
         Texture window radius. Must be a length unit (km); bare pixel
         WindowSpec is also accepted.
-    coord_mode : {'auto', 'position', 'spacing'}
-    kernel_mode : {'uniform', 'varying'}
+    coord_mode : {'auto', 'position', 'spacing'}, default 'auto'
+    kernel_mode : {'uniform', 'varying'}, default 'uniform'
         How to handle spatially-varying grid spacing (e.g. lat/lon grids,
         where dx shrinks with cos(latitude)):
           'uniform' (default) - one representative kernel for the whole
@@ -121,13 +275,16 @@ def run(dbz: Union[np.ndarray, list],
               lat/lon grids (it uses a single dx/dy computed at the
               domain's mean latitude). Fast; becomes approximate for
               domains spanning a wide latitude range.
-          'varying' - rebuilds the kernel from the local spacing at
+          'varying' - resolves the kernel from the local spacing at
               every grid point, so the physical kernel size stays
               correct across large/non-uniform domains. This is NOT
-              what LROSE does and is unvalidated against LROSE output;
-              substantially slower (no kernel reuse). Recommended only
-              for domains where 'uniform' is known to break down (e.g.
-              continental-scale lat/lon grids).
+              what LROSE does and is unvalidated against LROSE output.
+              Each distinct window is built once and reused (on a
+              regular lat/lon grid the window depends only on the row),
+              so on such grids it costs about the same as 'uniform';
+              on a grid whose spacing varies along x the window is
+              rebuilt at every point, as in EccoPy 1.0, which is much
+              slower.
     texture_params : TextureParams, optional
     class_params : ClassificationParams, optional
         use_dual_thresholds, secondary_convectivity,
@@ -174,59 +331,60 @@ def run(dbz: Union[np.ndarray, list],
     tp = texture_params or TextureParams()
     cp = class_params   or ClassificationParams()
 
-    # --- resolve coords → per-point spacing (km) ---
-    coords_y = np.asarray(coords_y, dtype=float)
-    coords_x = np.asarray(coords_x, dtype=float)
-
-    if coords_y.ndim == 1:
-        if coords_y.shape[0] != ny:
-            raise ValueError(f"coords_y length {coords_y.shape[0]} != Y={ny}")
-        sp_y_1d = resolve_spacing(coords_y, axis=0, mode=coord_mode)
-        sp_y = np.broadcast_to(sp_y_1d[:, np.newaxis], (ny, nx)).copy()
+    if grid is None:
+        if coords_y is None or coords_x is None:
+            raise ValueError(
+                "eccopy2d_h.run() needs coords_y and coords_x, or a grid "
+                "from eccopy2d_h.prepare_grid()."
+            )
+        # 1-D coordinate lengths are checked against dbz here, where the
+        # data shape is known; prepare_grid() takes its shape from them.
+        for name, c, size, axis in (("coords_y", coords_y, ny, "Y"),
+                                    ("coords_x", coords_x, nx, "X")):
+            c = np.asarray(c)
+            if c.ndim == 1 and c.shape[0] != size:
+                raise ValueError(f"{name} length {c.shape[0]} != {axis}={size}")
+        grid = prepare_grid(
+            coords_y, coords_x,
+            window=_DEFAULT_WINDOW if window is None else window,
+            coord_mode="auto" if coord_mode is None else coord_mode,
+            kernel_mode="uniform" if kernel_mode is None else kernel_mode,
+        )
     else:
-        sp_y = resolve_spacing(coords_y, axis=0, mode=coord_mode)
+        if coords_y is not None or coords_x is not None:
+            raise ValueError(
+                "Pass either coords_y/coords_x or grid, not both: the grid "
+                "already carries its coordinates."
+            )
+        given = [n for n, v in (("window", window), ("coord_mode", coord_mode),
+                                ("kernel_mode", kernel_mode)) if v is not None]
+        if given:
+            raise ValueError(
+                f"{', '.join(given)} cannot be passed with grid=: the grid "
+                f"fixes them. Pass them to prepare_grid() instead."
+            )
+        if not isinstance(grid, Grid2DH):
+            raise TypeError(
+                f"grid must come from eccopy2d_h.prepare_grid(); got "
+                f"{type(grid).__name__}"
+            )
+    if tuple(grid.shape) != (ny, nx):
+        raise ValueError(
+            f"dbz shape {(ny, nx)} does not match the grid's shape "
+            f"{tuple(grid.shape)}"
+        )
+    sp_y, sp_x = grid.spacing_y, grid.spacing_x
+    radius_km = grid.texture_radius
 
-    if coords_x.ndim == 1:
-        if coords_x.shape[0] != nx:
-            raise ValueError(f"coords_x length {coords_x.shape[0]} != X={nx}")
-        sp_x_1d = resolve_spacing(coords_x, axis=0, mode=coord_mode)
-        sp_x = np.broadcast_to(sp_x_1d[np.newaxis, :], (ny, nx)).copy()
-    else:
-        sp_x = resolve_spacing(coords_x, axis=1, mode=coord_mode)
-
-    # refl_texture_2d expects shape (nz, ny, nx); wrap the single level
-    dbz_3d = dbz[np.newaxis, :, :]   # (1, Y, X)
-
-    # Resolve window radius in km
-    if isinstance(window, (int, float)):
-        radius_km = float(window)
-    elif isinstance(window, WindowSpec):
-        if window.is_pixel:
-            # Convert pixel radius to km using median spacing
-            med_sp = float(np.nanmedian(np.stack([sp_y, sp_x])))
-            radius_km = window.size * med_sp
-        else:
-            if window.base_kind != "length_m":
-                raise ValueError(
-                    "eccopy2d_h texture window must be a length unit (km); "
-                    f"got unit kind '{window.base_kind}'."
-                )
-            radius_km = window.base_value / 1000.0
-    else:
-        radius_km = float(window)
-
-    # 1. 2D radial texture (one level)
-    texture_3d, fraction_active = refl_texture_2d(
-        dbz_3d,
-        texture_radius=radius_km,
-        dy=sp_y,
-        dx=sp_x,
+    # 1. 2D radial texture (one level; the texture stage takes (nz, ny, nx))
+    texture_3d, fraction_active = _refl_texture_2d_prepared(
+        dbz[np.newaxis, :, :],
+        grid._kernels,
         base_dbz=tp.dbz_base,
         min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
         min_frac_texture=tp.min_frac_texture,
         min_frac_fit=tp.min_frac_fit,
         n_threads=1,
-        kernel_mode=kernel_mode,
     )
     texture = texture_3d[0]   # back to (Y, X)
 
@@ -266,7 +424,7 @@ def run(dbz: Union[np.ndarray, list],
             dbz, radius_km, dy=sp_y, dx=sp_x,
             base_dbz=tp.dbz_base, min_valid_dbz=tp.resolve_min_valid_dbz(0.0),
             min_frac_texture=tp.min_frac_texture, min_frac_fit=tp.min_frac_fit,
-            kernel_mode=kernel_mode,
+            kernel_mode=grid.kernel_mode,
         )
 
     return Result2DH(

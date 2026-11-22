@@ -85,6 +85,12 @@ optimistic.
   equivalent that can be cross-checked against them (see
   `eccopy/tests/test_numba_cross_validation.py` and
   `test_debug.py` for the pattern).
+- The 2-D texture stage (`refl_texture_2d`, used by `eccopy2d_h` and
+  `eccopy3d`) must reproduce the frozen EccoPy 1.0.1 driver in
+  `eccopy/tests/_reference_impls/refl_texture_2d_v1_0_1.py` bit for bit,
+  in both kernel modes. A performance change there that cannot meet that
+  bar is a change to the algorithm, and falls under the ground-truth-first
+  standard above.
 - Prefer adding a new function over modifying a validated one in place
   when the new behavior is opt-in/debug-only — see
   `core/texture.py`'s `_sliding_texture_core_with_fit` next to
