@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-22
+
+Speed and memory for the 2-D texture stage that `eccopy2d_h` and `eccopy3d`
+share, prompted by running `eccopy2d_h` on every MRMS CONUS composite. No
+default result changes: everything below either reproduces EccoPy 1.0.1 bit
+for bit, checked against a frozen copy of the 1.0.1 code, or is opt-in. On
+the full CONUS grid (3500 x 7000) at 7 % echo cover, with a prepared grid,
+`kernel_mode="varying"` drops from 31 s to about 2.8 s on one core and 1.5 s
+on two, and `"uniform"` from 5.3 s to 2.5 s and 1.6 s (2-core cloud VM).
+
 ### Added
 - conda-forge install instructions and status badges (PyPI version,
   conda-forge version, supported Python versions, license) in `README.md`.

@@ -32,7 +32,7 @@ Quick start
     echo = result.echo_type           # (Z, Y, X), echo type codes
 """
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 from . import eccopy1d, eccopy2d_v, eccopy2d_h, eccopy3d
 from . import stats
