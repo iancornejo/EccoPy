@@ -75,8 +75,9 @@ from typing import Optional, Union
 import numpy as np
 
 from ..core.coords import resolve_spacing
-from ..core.texture import (_TextureKernels2D, _prepare_texture_2d,
-                            _refl_texture_2d_prepared)
+from ..core.texture import (_TextureKernels2D, _as_float_array,
+                            _prepare_texture_2d, _refl_texture_2d_prepared,
+                            _resolve_dtype)
 from ..core.convectivity import texture_to_convectivity_linear
 from ..core.classification import assign_echo_type_2d
 from ..eccopy2d_h.clumping import find_clumps_2d
@@ -117,8 +118,8 @@ class Grid2DH:
     resolved from them.
     """
     shape:          tuple          # (Y, X)
-    spacing_y:      np.ndarray     # (Y, X) N-S spacing, km
-    spacing_x:      np.ndarray     # (Y, X) E-W spacing, km
+    spacing_y:      np.ndarray     # (Y, X) N-S spacing, km (may be a broadcast view)
+    spacing_x:      np.ndarray     # (Y, X) E-W spacing, km (may be a broadcast view)
     window:         Union[WindowSpec, float]
     texture_radius: float          # km, resolved from `window`
     coord_mode:     str
@@ -201,12 +202,14 @@ def prepare_grid(coords_y: Union[np.ndarray, list],
     ny, nx = shape
 
     # --- resolve coords -> per-point spacing (km) ---
+    # 1-D spacing is broadcast to (Y, X) as a read-only view, not copied:
+    # everything downstream only reads it.
     sp_y, y_is_1d = _resolve_coords(cy, ny, 0, coord_mode, "coords_y")
     if y_is_1d:
-        sp_y = np.broadcast_to(sp_y[:, np.newaxis], (ny, nx)).copy()
+        sp_y = np.broadcast_to(sp_y[:, np.newaxis], (ny, nx))
     sp_x, x_is_1d = _resolve_coords(cx, nx, 1, coord_mode, "coords_x")
     if x_is_1d:
-        sp_x = np.broadcast_to(sp_x[np.newaxis, :], (ny, nx)).copy()
+        sp_x = np.broadcast_to(sp_x[np.newaxis, :], (ny, nx))
     if sp_y.shape != (ny, nx) or sp_x.shape != (ny, nx):
         raise ValueError(
             f"coords_y/coords_x describe different grids: spacing shapes "
@@ -249,7 +252,8 @@ def run(dbz: Union[np.ndarray, list],
         min_convective_area: Optional[float] = None,
         n_threads: int = 1,
         return_intermediates: bool = False,
-        grid: Optional[Grid2DH] = None) -> Result2DH:
+        grid: Optional[Grid2DH] = None,
+        dtype=np.float64) -> Result2DH:
     """
     Run EccoPy-2D-H: 2D radial texture → convectivity → 2D dual-threshold
     clumping → echo type classification.
@@ -257,7 +261,9 @@ def run(dbz: Union[np.ndarray, list],
     Parameters
     ----------
     dbz : array-like, shape (Y, X)
-        Reflectivity, dBZ. NaN where missing.
+        Reflectivity, dBZ. NaN where missing. float32 (as decoded from
+        GRIB2/MRMS) is used as is rather than copied to float64; results
+        are identical either way.
     coords_y : array-like, shape (Y,) or (Y, X)
         N-S position or spacing, km. Required unless `grid` is given.
     coords_x : array-like, shape (X,) or (Y, X)
@@ -306,6 +312,19 @@ def run(dbz: Union[np.ndarray, list],
         Threads for the texture stage, the bulk of the run time. Rows
         are split across threads, so a single composite uses all of
         them. Results are identical for any thread count.
+    grid : Grid2DH, optional
+        A grid from prepare_grid(), in place of coords_y/coords_x/window/
+        coord_mode/kernel_mode (which must then be omitted). Gives the
+        same result as passing those arguments, without re-resolving the
+        grid on every call.
+    dtype : {np.float64, np.float32}, default np.float64
+        Floating type of echo_type, convectivity, texture and
+        fraction_active. np.float32 halves their memory. Texture is still
+        accumulated in float64 and every threshold is applied in float64,
+        so the only change is the rounding of each stored value: an echo
+        type can differ from float64 only where convectivity sits within
+        rounding (~1e-7) of a threshold. Opt-in until validated as a
+        default; see README "Performance".
     return_intermediates : bool
         If True, also compute and attach `fitted_dbz` and `detrended_dbz`
         (the plane-fit value and detrended value at each point's own
@@ -321,12 +340,13 @@ def run(dbz: Union[np.ndarray, list],
     -------
     Result2DH
     """
-    dbz = np.asarray(dbz, dtype=float)
+    dbz = _as_float_array(dbz)
     if dbz.ndim != 2:
         raise ValueError(
             f"eccopy2d_h expects a 2-D (Y, X) dbz array; got shape {dbz.shape}"
         )
     ny, nx = dbz.shape
+    out_dtype = _resolve_dtype(dtype)
 
     tp = texture_params or TextureParams()
     cp = class_params   or ClassificationParams()
@@ -385,6 +405,7 @@ def run(dbz: Union[np.ndarray, list],
         min_frac_texture=tp.min_frac_texture,
         min_frac_fit=tp.min_frac_fit,
         n_threads=n_threads,
+        dtype=out_dtype,
     )
     texture = texture_3d[0]   # back to (Y, X)
 
@@ -415,6 +436,7 @@ def run(dbz: Union[np.ndarray, list],
         conv,
         clumps=clumps,
         max_conv_for_strat=cp.max_convectivity_for_stratiform,
+        dtype=out_dtype,
     )
 
     fitted_dbz = detrended_dbz = None

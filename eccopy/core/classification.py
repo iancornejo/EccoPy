@@ -762,7 +762,8 @@ def class_sub_2d(class_in: np.ndarray,
 
 def assign_echo_type_2d(convectivity: np.ndarray,
                         clumps: list,
-                        max_conv_for_strat: float) -> np.ndarray:
+                        max_conv_for_strat: float,
+                        dtype=np.float64) -> np.ndarray:
     """
     Assign basic (1/2/3) echo type codes for EccoPy-2D-H from a list of
     2-D clumps (see eccopy2d_h/clumping.py:find_clumps_2d()).
@@ -785,13 +786,18 @@ def assign_echo_type_2d(convectivity: np.ndarray,
     max_conv_for_strat : float
         Convectivity threshold above which a non-clump point is Mixed
         rather than Stratiform (same role as class_basic's strat_mixed).
+        Compared in float64 whatever convectivity's dtype.
+    dtype : {np.float64, np.float32}
+        Floating type of the returned array (codes and NaN are exact in
+        either).
 
     Returns
     -------
     echo_type : np.ndarray, shape (Y, X)
         1=Stratiform, 2=Mixed, 3=Convective, NaN=missing/no data.
     """
-    result = np.full(convectivity.shape, np.nan)
+    result = np.full(convectivity.shape, np.nan, dtype=dtype)
+    max_conv_for_strat = np.float64(max_conv_for_strat)
 
     # Pass 1 - clump pixels are Convective, unconditionally (any clump
     # that reached this function already passed find_clumps_2d()'s own

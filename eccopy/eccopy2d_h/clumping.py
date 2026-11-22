@@ -73,7 +73,9 @@ def find_clumps_2d(convectivity: np.ndarray,
     convectivity : np.ndarray, shape (Y, X)
     spacing_y, spacing_x : np.ndarray, shape (Y, X)
         Local point-to-point spacing, km. Used for per-pixel area
-        (spacing_y * spacing_x) in all area filters.
+        (spacing_y * spacing_x) in all area filters, formed only inside
+        each clump's bounding box, so read-only broadcast views of 1-D
+        spacing cost no full-size memory.
     min_conv : float
         PRIMARY threshold -- builds the Stage-1 envelope clumps.
     min_area_km2 : float, optional
@@ -105,7 +107,9 @@ def find_clumps_2d(convectivity: np.ndarray,
             as echo_type[clump['index']] = ...),
         area_km2, n_pts_total
     """
-    convectivity = np.asarray(convectivity, dtype=float)
+    convectivity = np.asarray(convectivity)
+    if convectivity.dtype not in (np.float32, np.float64):
+        convectivity = convectivity.astype(np.float64)
     spacing_y = np.asarray(spacing_y, dtype=float)
     spacing_x = np.asarray(spacing_x, dtype=float)
     if spacing_y.shape != convectivity.shape or spacing_x.shape != convectivity.shape:
@@ -113,8 +117,15 @@ def find_clumps_2d(convectivity: np.ndarray,
             f"spacing_y/spacing_x shape must match convectivity shape "
             f"{convectivity.shape}; got {spacing_y.shape}, {spacing_x.shape}"
         )
-    pixel_area = spacing_y * spacing_x
+    # Thresholds as float64 scalars, so float32 convectivity is compared
+    # in float64 (a float32 0.65 is 0.64999998); a no-op for float64 input.
+    min_conv = np.float64(min_conv)
+    secondary_threshold = np.float64(secondary_threshold)
     area_floor = min_area_km2 if min_area_km2 is not None else 0.0
+
+    def _pixel_area(bbox):
+        # spacing_y * spacing_x, formed for one bounding box at a time.
+        return spacing_y[bbox] * spacing_x[bbox]
 
     def _geom_for_mask(local_mask, bbox, local_area):
         iy_local, ix_local = np.where(local_mask)
@@ -139,7 +150,7 @@ def find_clumps_2d(convectivity: np.ndarray,
             if bbox is None:
                 continue
             local_mask = labeled[bbox] == cid
-            local_area = pixel_area[bbox]
+            local_area = _pixel_area(bbox)
             clump = _geom_for_mask(local_mask, bbox, local_area)
             if clump['area_km2'] >= area_floor:
                 clumps.append(clump)
@@ -162,7 +173,7 @@ def find_clumps_2d(convectivity: np.ndarray,
 
         primary_mask = labeled_primary[bbox] == cid
         local_conv = convectivity[bbox]
-        local_area = pixel_area[bbox]
+        local_area = _pixel_area(bbox)
 
         primary_area = float(np.sum(local_area[primary_mask]))
         if primary_area < area_floor:

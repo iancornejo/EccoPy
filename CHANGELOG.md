@@ -19,6 +19,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `window`, `coord_mode` and `kernel_mode` now default to `None`, meaning
   the same defaults as before; passing any of them together with `grid=`
   raises instead of being silently ignored.
+- **`dtype=np.float32` for `eccopy2d_h.run()`** (and for `refl_texture_2d()`
+  and `assign_echo_type_2d()`): echo type, convectivity, texture and
+  coverage come back as float32, at half the memory. Texture is still
+  accumulated in float64, coverage stays float64 until the end, and every
+  threshold is applied in float64, so only the rounding of each stored value
+  changes - at most about 1e-6 dB in texture and 6e-8 in convectivity. On
+  the bundled composite, a CONUS-size grid at 1, 7 and 14 % echo cover in
+  both kernel modes, and every level of the bundled WRF volume at three
+  window sizes (about 15 million echo points), no echo type and no clump
+  count changed. Opt-in; the default stays float64.
+- **`latlon_grid_spacing(lat, lon)`**: the N-S and E-W spacing of a regular
+  lat/lon grid from its 1-D coordinates, as read-only broadcast views. The
+  same haversine distances `latlon_to_xy_spacing()` gives on the meshgrid
+  (along its first column), for a few kB instead of about 400 MB on the
+  CONUS grid.
 
 ### Changed
 - **`kernel_mode="varying"` builds each distinct texture window once.** 1.0
@@ -38,6 +53,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   texture cores release the GIL while they run. `eccopy2d_h`, which has
   one level, now uses every thread; before, its `n_threads` was accepted
   but ignored. Results are identical at any thread count.
+- **Less memory in `eccopy2d_h` and the shared texture stage, with
+  bit-identical results.** float32 reflectivity is used as is rather than
+  copied to float64 (each value is promoted exactly where it is read).
+  Values below `min_valid_dbz` are skipped inside the texture cores instead
+  of in a NaN-masked copy of the input, and the column maximum is no longer
+  copied to replace NaN with -9999. Spacing built from 1-D coordinates is a
+  broadcast view rather than a full-size copy, in `eccopy3d` too.
+  Convectivity is built in one array, and clump area is formed one bounding
+  box at a time. On the CONUS grid, peak memory above the input drops from
+  about 1.4 GB to 0.8 GB (0.5 GB with `dtype=np.float32`).
 
 ### Fixed
 - **`eccopy3d`'s `n_threads` had almost no effect.** Its per-level threads

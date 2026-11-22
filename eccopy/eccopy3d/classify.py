@@ -186,9 +186,10 @@ def run(dbz: Union[np.ndarray, list],
     sp_y_1d = _resolve_1d_or_nd(coords_y, 0, ny, "coords_y")
     sp_x_1d = _resolve_1d_or_nd(coords_x, 0, nx, "coords_x")
 
-    # Build 2D (Y, X) spacing arrays for texture calculation
-    sp_y_2d = np.broadcast_to(sp_y_1d[:, np.newaxis], (ny, nx)).copy()
-    sp_x_2d = np.broadcast_to(sp_x_1d[np.newaxis, :], (ny, nx)).copy()
+    # 2D (Y, X) spacing for the texture stage, as read-only views of the
+    # 1-D spacing: the texture stage only reads them.
+    sp_y_2d = np.broadcast_to(sp_y_1d[:, np.newaxis], (ny, nx))
+    sp_x_2d = np.broadcast_to(sp_x_1d[np.newaxis, :], (ny, nx))
 
     # --- dz for 3-D cell-volume / clump geometry: use the EXACT
     # ConvStratFinder/PjgGridGeom::dzKm() centered-difference convention
