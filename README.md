@@ -404,7 +404,7 @@ latest release:
 > [10.5281/zenodo.21840860](https://doi.org/10.5281/zenodo.21840860)
 
 For exact reproducibility, cite the DOI of the specific version you used
-instead - v1.0.0 is [10.5281/zenodo.21840861](https://doi.org/10.5281/zenodo.21840861).
+instead - v1.1.0 is [10.5281/zenodo.24448209](https://doi.org/10.5281/zenodo.24448209).
 
 `CITATION.cff` in the repository root carries the full software citation,
 which GitHub renders as a "Cite this repository" button. Please cite the
